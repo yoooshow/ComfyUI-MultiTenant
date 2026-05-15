@@ -17,6 +17,7 @@ from utils.mime_types import init_mime_types
 import faulthandler
 import logging
 import sys
+import traceback
 from comfy_execution.progress import get_progress_state
 from comfy_execution.utils import get_executing_context
 from comfy_api import feature_flags
@@ -139,7 +140,6 @@ def execute_prestartup_script():
             spec.loader.exec_module(module)
             return True
         except Exception as e:
-            import traceback
             logging.error(f"Failed to execute startup-script: {script_path} / {e}")
             from nodes import record_node_startup_error
             record_node_startup_error(

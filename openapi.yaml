@@ -1768,7 +1768,13 @@ paths:
                 preview_id:
                   type: string
                   format: uuid
-                  description: ID of the asset to use as the preview
+                  description: ID of the asset to use as the preview. Ignored when `clear_preview_id` is true.
+                clear_preview_id:
+                  type: boolean
+                  description: |
+                    When true, clears the preview asset link (sets `preview_id` to null).
+                    Takes precedence over `preview_id` if both are provided. Matches the
+                    `clear` flag convention used by `/api/queue` and `/api/history`.
                 mime_type:
                   type: string
                   nullable: true

@@ -101,16 +101,39 @@ class UpdateAssetBody(BaseModel):
     name: str | None = None
     user_metadata: dict[str, Any] | None = None
     preview_id: str | None = None  # references an asset_reference id, not an asset id
+    # clear_preview_id matches the `clear` flag convention used by /api/queue
+    # and /api/history. When true, the preview link is cleared; takes precedence
+    # over preview_id if both are provided.
+    clear_preview_id: bool | None = None
 
     @model_validator(mode="after")
     def _validate_at_least_one_field(self):
-        if all(
-            v is None
-            for v in (self.name, self.user_metadata, self.preview_id)
+        # clear_preview_id is only meaningful when true; explicit false is a no-op
+        # and shouldn't satisfy the "at least one field" requirement.
+        if (
+            self.name is None
+            and self.user_metadata is None
+            and self.preview_id is None
+            and not self.clear_preview_id
         ):
             raise ValueError(
-                "Provide at least one of: name, user_metadata, preview_id."
+                "Provide at least one of: name, user_metadata, preview_id, clear_preview_id."
             )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_preview_id_shape(self):
+        # Skip preview_id semantic checks when the caller is clearing — the
+        # field is ignored in that case.
+        if self.clear_preview_id:
+            return self
+        if self.preview_id is None:
+            return self
+        # Reject zero UUID — would otherwise become a real DB lookup that
+        # returns 404, leaking that the caller fat-fingered the UUID rather
+        # than that the asset doesn't exist.
+        if self.preview_id == "00000000-0000-0000-0000-000000000000":
+            raise ValueError("preview_id must not be the zero UUID.")
         return self
 
 

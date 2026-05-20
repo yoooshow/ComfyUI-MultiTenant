@@ -71,6 +71,7 @@ def update_asset_metadata(
     owner_id: str = "",
     mime_type: str | None = None,
     preview_id: str | None = None,
+    clear_preview_id: bool = False,
 ) -> AssetDetailResult:
     with create_session() as session:
         ref = get_reference_with_owner_check(session, reference_id, owner_id)
@@ -114,7 +115,16 @@ def update_asset_metadata(
             if updated:
                 touched = True
 
-        if preview_id is not None:
+        # Clear takes precedence over set when both are provided — matches the
+        # handler-level flag semantics.
+        if clear_preview_id:
+            set_reference_preview(
+                session,
+                reference_id=reference_id,
+                preview_reference_id=None,
+            )
+            touched = True
+        elif preview_id is not None:
             set_reference_preview(
                 session,
                 reference_id=reference_id,

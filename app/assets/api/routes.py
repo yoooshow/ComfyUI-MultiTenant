@@ -488,6 +488,17 @@ async def update_asset_route(request: web.Request) -> web.Response:
             400, "INVALID_JSON", "Request body must be valid JSON."
         )
 
+    # Self-reference rejection. Cheap pre-check at the handler layer since the
+    # path id isn't visible to the pydantic body validator.
+    clear_preview = bool(body.clear_preview_id)
+    if not clear_preview and body.preview_id == reference_id:
+        return _build_error_response(
+            400,
+            "SELF_REFERENCE",
+            "preview_id cannot reference the asset itself.",
+            {"id": reference_id},
+        )
+
     try:
         result = update_asset_metadata(
             reference_id=reference_id,
@@ -495,6 +506,7 @@ async def update_asset_route(request: web.Request) -> web.Response:
             user_metadata=body.user_metadata,
             owner_id=USER_MANAGER.get_request_user_id(request),
             preview_id=body.preview_id,
+            clear_preview_id=clear_preview,
         )
         payload = _build_asset_response(result)
     except PermissionError as pe:

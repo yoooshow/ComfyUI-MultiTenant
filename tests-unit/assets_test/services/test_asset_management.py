@@ -123,6 +123,65 @@ class TestUpdateAssetMetadata:
         assert updated_ref.user_metadata["key"] == "value"
         assert updated_ref.user_metadata["num"] == 42
 
+    def test_sets_preview_via_preview_id(self, mock_create_session, session: Session):
+        asset = _make_asset(session)
+        preview_asset = _make_asset(session, hash_val="blake3:preview")
+        ref = _make_reference(session, asset)
+        preview_ref = _make_reference(session, preview_asset, name="preview.png")
+        ref_id = ref.id
+        preview_ref_id = preview_ref.id
+        session.commit()
+
+        update_asset_metadata(
+            reference_id=ref_id,
+            preview_id=preview_ref_id,
+        )
+
+        session.expire_all()
+        updated_ref = session.get(AssetReference, ref_id)
+        assert updated_ref.preview_id == preview_ref_id
+
+    def test_clear_preview_id_clears_the_link(self, mock_create_session, session: Session):
+        asset = _make_asset(session)
+        preview_asset = _make_asset(session, hash_val="blake3:preview")
+        ref = _make_reference(session, asset)
+        preview_ref = _make_reference(session, preview_asset, name="preview.png")
+        ref.preview_id = preview_ref.id
+        ref_id = ref.id
+        session.commit()
+
+        update_asset_metadata(
+            reference_id=ref_id,
+            clear_preview_id=True,
+        )
+
+        session.expire_all()
+        updated_ref = session.get(AssetReference, ref_id)
+        assert updated_ref.preview_id is None
+
+    def test_clear_preview_id_takes_precedence_over_preview_id(
+        self, mock_create_session, session: Session
+    ):
+        asset = _make_asset(session)
+        preview_asset = _make_asset(session, hash_val="blake3:preview")
+        ref = _make_reference(session, asset)
+        preview_ref = _make_reference(session, preview_asset, name="preview.png")
+        ref.preview_id = preview_ref.id
+        ref_id = ref.id
+        preview_ref_id = preview_ref.id
+        session.commit()
+
+        # Both flags set — clear wins. preview_id should not be linked.
+        update_asset_metadata(
+            reference_id=ref_id,
+            preview_id=preview_ref_id,
+            clear_preview_id=True,
+        )
+
+        session.expire_all()
+        updated_ref = session.get(AssetReference, ref_id)
+        assert updated_ref.preview_id is None
+
     def test_raises_for_nonexistent(self, mock_create_session):
         with pytest.raises(ValueError, match="not found"):
             update_asset_metadata(reference_id="nonexistent", name="fail")

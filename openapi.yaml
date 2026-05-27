@@ -10062,6 +10062,12 @@ components:
         size_bytes:
           type: integer
           format: int64
+        in_library:
+          type: boolean
+          nullable: true
+          x-runtime:
+            - cloud
+          description: "[cloud-only] Whether the asset is present in the user's library (vs. a discovery/search result)."
 
     BulkRevokeAPIKeysResponse:
       type: object

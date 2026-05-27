@@ -8099,6 +8099,12 @@ components:
         name:
           type: string
           description: Name of the asset file
+        display_name:
+          type: string
+          nullable: true
+          x-runtime:
+            - cloud
+          description: "[cloud-only] Human-friendly display name for the asset. Cloud-populated; null in local ComfyUI."
         hash:
           type: string
           nullable: true

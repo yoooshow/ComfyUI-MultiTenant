@@ -1,7 +1,9 @@
 import argparse
+import json
 import logging
 import os
 import re
+import shutil
 import sys
 import tempfile
 import zipfile
@@ -205,6 +207,129 @@ def download_release_asset_zip(release: Release, destination_path: str) -> None:
 class FrontendManager:
     CUSTOM_FRONTENDS_ROOT = str(Path(__file__).parents[1] / "web_custom_versions")
 
+    # Version specifiers that resolve to a moving target on each invocation.
+    # Versions downloaded via these specifiers are tracked in the per-provider
+    # metadata file so that stale copies can be pruned when a new release
+    # becomes the current one. Explicitly pinned versions (e.g. ``@1.46.0`` or
+    # ``@v1.46.0``) are left alone so users can keep them around indefinitely
+    # for things like bisecting frontend regressions.
+    AUTO_MANAGED_VERSION_SPECIFIERS = ("latest", "prerelease")
+
+    # File written next to per-provider version folders that records which
+    # versions were downloaded via an auto-managed specifier. Hidden so it does
+    # not show up as a sibling release in casual ``ls`` output.
+    AUTO_MANAGED_METADATA_FILENAME = ".auto_managed.json"
+
+    @classmethod
+    def _provider_dir(cls, repo_owner: str, repo_name: str) -> Path:
+        return Path(cls.CUSTOM_FRONTENDS_ROOT) / f"{repo_owner}_{repo_name}"
+
+    @classmethod
+    def _auto_managed_metadata_path(cls, repo_owner: str, repo_name: str) -> Path:
+        return cls._provider_dir(repo_owner, repo_name) / cls.AUTO_MANAGED_METADATA_FILENAME
+
+    @classmethod
+    def _read_auto_managed_versions(cls, repo_owner: str, repo_name: str) -> list[str]:
+        """Return the list of versions previously downloaded under an
+        auto-managed specifier for this provider. Missing or unreadable
+        metadata is treated as an empty list."""
+        metadata_path = cls._auto_managed_metadata_path(repo_owner, repo_name)
+        if not metadata_path.exists():
+            return []
+        try:
+            with open(metadata_path, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+        except (OSError, ValueError) as exc:
+            logging.warning(
+                "Could not read frontend auto-managed metadata at %s: %s",
+                metadata_path,
+                exc,
+            )
+            return []
+        versions = data.get("auto_managed", [])
+        if not isinstance(versions, list):
+            return []
+        return [str(v) for v in versions if isinstance(v, (str, int))]
+
+    @classmethod
+    def _write_auto_managed_versions(
+        cls, repo_owner: str, repo_name: str, versions: list[str]
+    ) -> None:
+        """Persist the auto-managed version list atomically. Deduped and
+        sorted for stability so the file is friendly to diffs."""
+        metadata_path = cls._auto_managed_metadata_path(repo_owner, repo_name)
+        metadata_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {"auto_managed": sorted(set(versions))}
+        # Atomic write via temp file + rename so a crashed process can't leave
+        # a half-written metadata file behind.
+        tmp_path = metadata_path.with_suffix(metadata_path.suffix + ".tmp")
+        try:
+            with open(tmp_path, "w", encoding="utf-8") as fh:
+                json.dump(payload, fh, indent=2, sort_keys=True)
+            os.replace(tmp_path, metadata_path)
+        except OSError as exc:
+            logging.warning(
+                "Could not write frontend auto-managed metadata at %s: %s",
+                metadata_path,
+                exc,
+            )
+            if tmp_path.exists():
+                try:
+                    tmp_path.unlink()
+                except OSError:
+                    pass
+
+    @classmethod
+    def _prune_auto_managed_versions(
+        cls, repo_owner: str, repo_name: str, keep_version: str
+    ) -> None:
+        """Remove all auto-managed version folders for this provider other
+        than ``keep_version`` and update the metadata to only list it.
+
+        Folders that aren't currently tracked as auto-managed (i.e. explicitly
+        pinned downloads) are never touched.
+        """
+        tracked = cls._read_auto_managed_versions(repo_owner, repo_name)
+        if not tracked and keep_version is None:
+            return
+
+        provider_dir = cls._provider_dir(repo_owner, repo_name)
+        for stale_version in tracked:
+            if stale_version == keep_version:
+                continue
+            stale_path = provider_dir / stale_version
+            if not stale_path.exists():
+                continue
+            try:
+                shutil.rmtree(stale_path)
+                logging.info(
+                    "Removed stale auto-managed frontend version: %s",
+                    stale_path,
+                )
+            except OSError as exc:
+                logging.warning(
+                    "Failed to remove stale frontend version at %s: %s",
+                    stale_path,
+                    exc,
+                )
+
+        new_tracked = [keep_version] if keep_version else []
+        cls._write_auto_managed_versions(repo_owner, repo_name, new_tracked)
+
+    @classmethod
+    def _untrack_auto_managed_version(
+        cls, repo_owner: str, repo_name: str, version: str
+    ) -> None:
+        """Drop ``version`` from the auto-managed list without deleting its
+        folder. Used when a user explicitly pins a version that previously
+        had been downloaded under ``@latest`` / ``@prerelease`` so the next
+        auto cleanup pass doesn't wipe it out."""
+        tracked = cls._read_auto_managed_versions(repo_owner, repo_name)
+        if version not in tracked:
+            return
+        tracked = [v for v in tracked if v != version]
+        cls._write_auto_managed_versions(repo_owner, repo_name, tracked)
+
     @classmethod
     def get_required_frontend_version(cls) -> str:
         """Get the required frontend package version."""
@@ -372,6 +497,7 @@ comfyui-workflow-templates is not installed.
             return cls.default_frontend_path()
 
         repo_owner, repo_name, version = cls.parse_version_string(version_string)
+        is_auto_managed = version in cls.AUTO_MANAGED_VERSION_SPECIFIERS
 
         if version.startswith("v"):
             expected_path = str(
@@ -382,6 +508,12 @@ comfyui-workflow-templates is not installed.
             if os.path.exists(expected_path):
                 logging.info(
                     f"Using existing copy of specific frontend version tag: {repo_owner}/{repo_name}@{version}"
+                )
+                # User explicitly pinned this exact version: promote it out of
+                # the auto-managed set so future @latest cleanups won't wipe
+                # it out.
+                cls._untrack_auto_managed_version(
+                    repo_owner, repo_name, version.lstrip("v")
                 )
                 return expected_path
 
@@ -396,7 +528,8 @@ comfyui-workflow-templates is not installed.
         web_root = str(
             Path(cls.CUSTOM_FRONTENDS_ROOT) / provider.folder_name / semantic_version
         )
-        if not os.path.exists(web_root):
+        download_succeeded = os.path.exists(web_root)
+        if not download_succeeded:
             try:
                 os.makedirs(web_root, exist_ok=True)
                 logging.info(
@@ -407,10 +540,29 @@ comfyui-workflow-templates is not installed.
                 )
                 logging.debug(release)
                 download_release_asset_zip(release, destination_path=web_root)
+                download_succeeded = True
             finally:
                 # Clean up the directory if it is empty, i.e. the download failed
                 if not os.listdir(web_root):
                     os.rmdir(web_root)
+                    download_succeeded = False
+
+        if download_succeeded:
+            if is_auto_managed:
+                # Wipe out previously-tracked auto-managed versions and record
+                # the current one. This is what keeps disk usage bounded when
+                # users run with ``--front-end-version <repo>@latest`` over a
+                # long period of time (CORE-285).
+                cls._prune_auto_managed_versions(
+                    repo_owner, repo_name, semantic_version
+                )
+            else:
+                # An explicit version request matched a folder that had been
+                # downloaded under @latest previously. Promote it so it is no
+                # longer subject to auto-cleanup.
+                cls._untrack_auto_managed_version(
+                    repo_owner, repo_name, semantic_version
+                )
 
         return web_root
 

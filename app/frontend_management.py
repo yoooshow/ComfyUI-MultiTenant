@@ -207,14 +207,8 @@ def download_release_asset_zip(release: Release, destination_path: str) -> None:
 class FrontendManager:
     CUSTOM_FRONTENDS_ROOT = str(Path(__file__).parents[1] / "web_custom_versions")
 
-    # Specifiers that resolve to a moving target. Downloads made via these are
-    # tracked so old copies can be pruned; explicit pins (@1.46.0, @v1.46.0)
-    # are left alone.
     AUTO_MANAGED_VERSION_SPECIFIERS = ("latest", "prerelease")
     AUTO_MANAGED_METADATA_FILENAME = ".auto_managed.json"
-
-    # Allowlist for version directory names. Prevents a tampered metadata
-    # file from steering cleanup at paths like "../etc".
     _VERSION_DIRNAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
     @classmethod
@@ -235,8 +229,6 @@ class FrontendManager:
 
     @classmethod
     def _read_auto_managed_versions(cls, repo_owner: str, repo_name: str) -> list[str]:
-        """Versions tracked as auto-managed for this provider. Any error or
-        malformed content yields an empty list."""
         metadata_path = cls._auto_managed_metadata_path(repo_owner, repo_name)
         if not metadata_path.exists():
             return []
@@ -269,7 +261,6 @@ class FrontendManager:
         metadata_path.parent.mkdir(parents=True, exist_ok=True)
         safe_versions = [v for v in versions if cls._is_safe_version_dirname(v)]
         payload = {"auto_managed": sorted(set(safe_versions))}
-        # Atomic write: tmp + rename so a crash can't leave a half-written file.
         tmp_path = metadata_path.with_suffix(metadata_path.suffix + ".tmp")
         try:
             with open(tmp_path, "w", encoding="utf-8") as fh:
@@ -291,8 +282,6 @@ class FrontendManager:
     def _prune_auto_managed_versions(
         cls, repo_owner: str, repo_name: str, keep_version: str
     ) -> None:
-        """Remove tracked auto-managed folders other than ``keep_version``
-        and rewrite the metadata to list only it."""
         tracked = cls._read_auto_managed_versions(repo_owner, repo_name)
         if not tracked and keep_version is None:
             return
@@ -311,8 +300,8 @@ class FrontendManager:
         for stale_version in tracked:
             if stale_version == keep_version:
                 continue
-            # Defense in depth: read already filters, but re-check here so
-            # the rmtree target is provably under the provider dir.
+            # Re-check even though read already filters: keeps rmtree provably
+            # bounded under provider_dir regardless of caller.
             if not cls._is_safe_version_dirname(stale_version):
                 logging.warning(
                     "Refusing to clean up suspicious frontend version name: %r",
@@ -361,8 +350,6 @@ class FrontendManager:
     def _untrack_auto_managed_version(
         cls, repo_owner: str, repo_name: str, version: str
     ) -> None:
-        """Drop ``version`` from auto-managed tracking without touching its
-        folder, so a subsequent explicit pin survives later @latest cleanups."""
         tracked = cls._read_auto_managed_versions(repo_owner, repo_name)
         if version not in tracked:
             return

@@ -323,13 +323,16 @@ MESH_EXTENSIONS = {'.gltf', '.glb', '.obj', '.fbx', '.stl'}
 class Load3DAdvanced(IO.ComfyNode):
     @classmethod
     def define_schema(cls):
-        input_dir = folder_paths.get_input_directory()
+        input_dir = os.path.join(folder_paths.get_input_directory(), "3d")
         os.makedirs(input_dir, exist_ok=True)
 
+        input_path = Path(input_dir)
+        base_path = Path(folder_paths.get_input_directory())
+
         files = [
-            f for f in os.listdir(input_dir)
-            if os.path.isfile(os.path.join(input_dir, f))
-            and os.path.splitext(f)[1].lower() in MESH_EXTENSIONS
+            normalize_path(str(file_path.relative_to(base_path)))
+            for file_path in input_path.rglob("*")
+            if file_path.suffix.lower() in MESH_EXTENSIONS
         ]
         return IO.Schema(
             node_id="Load3DAdvanced",

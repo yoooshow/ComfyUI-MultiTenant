@@ -168,7 +168,6 @@ class SaveAudio(IO.ComfyNode):
             hidden=[IO.Hidden.prompt, IO.Hidden.extra_pnginfo],
             is_deprecated=True,
             is_output_node=True,
-            cache_no_cascade=True,
             outputs=[IO.Audio.Output("audio")]
         )
 
@@ -199,7 +198,6 @@ class SaveAudioMP3(IO.ComfyNode):
             hidden=[IO.Hidden.prompt, IO.Hidden.extra_pnginfo],
             is_deprecated=True,
             is_output_node=True,
-            cache_no_cascade=True,
             outputs=[IO.Audio.Output("audio")]
         )
 
@@ -231,7 +229,6 @@ class SaveAudioOpus(IO.ComfyNode):
             hidden=[IO.Hidden.prompt, IO.Hidden.extra_pnginfo],
             is_deprecated=True,
             is_output_node=True,
-            cache_no_cascade=True,
             outputs=[IO.Audio.Output("audio")]
         )
 
@@ -279,7 +276,6 @@ class SaveAudioAdvanced(IO.ComfyNode):
             ],
             hidden=[IO.Hidden.prompt, IO.Hidden.extra_pnginfo],
             is_output_node=True,
-            cache_no_cascade=True,
             outputs=[IO.Audio.Output("audio")],
         )
 

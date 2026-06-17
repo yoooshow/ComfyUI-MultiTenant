@@ -27,7 +27,6 @@ class SaveWEBM(io.ComfyNode):
             ],
             hidden=[io.Hidden.prompt, io.Hidden.extra_pnginfo],
             is_output_node=True,
-            cache_no_cascade=True,
             outputs=[io.Image.Output(display_name="images")]
         )
 
@@ -91,7 +90,6 @@ class SaveVideo(io.ComfyNode):
             ],
             hidden=[io.Hidden.prompt, io.Hidden.extra_pnginfo],
             is_output_node=True,
-            cache_no_cascade=True,
             outputs=[io.Video.Output("video")],
         )
 

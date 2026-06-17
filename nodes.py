@@ -493,7 +493,6 @@ class SaveLatent:
     FUNCTION = "save"
 
     OUTPUT_NODE = True
-    CACHE_NO_CASCADE = True
 
     CATEGORY = "experimental"
 
@@ -1649,7 +1648,6 @@ class SaveImage:
     FUNCTION = "save_images"
 
     OUTPUT_NODE = True
-    CACHE_NO_CASCADE = True
 
     CATEGORY = "image"
     ESSENTIALS_CATEGORY = "Basics"

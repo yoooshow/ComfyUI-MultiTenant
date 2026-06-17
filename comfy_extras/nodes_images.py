@@ -214,7 +214,6 @@ class SaveAnimatedWEBP(IO.ComfyNode):
             ],
             hidden=[IO.Hidden.prompt, IO.Hidden.extra_pnginfo],
             is_output_node=True,
-            cache_no_cascade=True,
             outputs=[IO.Image.Output(display_name="images")]
         )
 
@@ -250,7 +249,6 @@ class SaveAnimatedPNG(IO.ComfyNode):
             ],
             hidden=[IO.Hidden.prompt, IO.Hidden.extra_pnginfo],
             is_output_node=True,
-            cache_no_cascade=True,
             outputs=[IO.Image.Output(display_name="images")]
         )
 
@@ -515,7 +513,6 @@ class SaveSVGNode(IO.ComfyNode):
             ],
             hidden=[IO.Hidden.prompt, IO.Hidden.extra_pnginfo],
             is_output_node=True,
-            cache_no_cascade=True,
             outputs=[IO.SVG.Output("svg")],
         )
 
@@ -1189,7 +1186,6 @@ class SaveImageAdvanced(IO.ComfyNode):
             ],
             hidden=[IO.Hidden.prompt, IO.Hidden.extra_pnginfo],
             is_output_node=True,
-            cache_no_cascade=True,
             outputs=[IO.Image.Output(display_name="images")]
         )
 

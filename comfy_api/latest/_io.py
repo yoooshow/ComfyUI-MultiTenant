@@ -847,6 +847,16 @@ class Load3DAnimation(Load3D):
     ...
 
 
+@comfytype(io_type="CAMERA_INFO_STATE")
+class CameraInfoState(ComfyTypeI):
+    Type = dict
+
+    class Input(WidgetInput):
+        def __init__(self, id: str, display_name: str=None, optional=False, tooltip: str=None,
+                     socketless: bool=True, advanced: bool=None):
+            super().__init__(id, display_name, optional, tooltip, None, None, socketless, None, None, None, None, advanced)
+
+
 @comfytype(io_type="PHOTOMAKER")
 class Photomaker(ComfyTypeIO):
     Type = Any
@@ -2403,6 +2413,7 @@ __all__ = [
     "Load3DModelInfo",
     "Load3D",
     "Load3DAnimation",
+    "CameraInfoState",
     "Photomaker",
     "Point",
     "FaceAnalysis",

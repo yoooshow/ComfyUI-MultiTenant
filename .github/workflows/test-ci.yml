@@ -1,9 +1,5 @@
-# This is the GitHub Workflow that drives full-GPU-enabled tests of ComfyUI.
+# This is the GitHub Workflow that drives automatic full-GPU-enabled tests of all new commits to the master branch of ComfyUI
 # Results are reported as checkmarks on the commits, as well as onto https://ci.comfy.org/
-#
-# Trigger policy:
-#   push to master/release   -> a lightweight "smoke" run (one stable config) for a fast per-commit signal
-#   workflow_dispatch        -> operator-selected scope; "full" runs the complete supported matrix on demand
 name: Full Comfy CI Workflow Runs
 on:
   push:
@@ -19,73 +15,70 @@ on:
       - '.github/**'
       - 'web/**'
   workflow_dispatch:
-    inputs:
-      scope:
-        description: "Test scope: 'smoke' = one stable config, 'full' = all supported Python versions + nightly"
-        type: choice
-        options:
-          - smoke
-          - full
-        default: full
 
 jobs:
-  # Resolve the test scope from the trigger:
-  #   push              -> smoke  (cheap per-commit signal on master)
-  #   workflow_dispatch -> the scope chosen by the operator (defaults to full)
-  # Expanding coverage later (new Python versions, etc.) is a one-line edit to the JSON below.
-  prepare:
-    runs-on: ubuntu-latest
-    outputs:
-      stable_python: ${{ steps.scope.outputs.stable_python }}
-      run_nightly: ${{ steps.scope.outputs.run_nightly }}
-    steps:
-      - name: Resolve scope
-        id: scope
-        shell: bash
-        run: |
-          SCOPE="${{ github.event_name == 'workflow_dispatch' && inputs.scope || 'smoke' }}"
-          echo "Trigger=${{ github.event_name }} resolved scope=$SCOPE"
-          if [ "$SCOPE" = "full" ]; then
-            echo 'stable_python=["3.10", "3.11", "3.12"]' >> "$GITHUB_OUTPUT"
-            echo 'run_nightly=true' >> "$GITHUB_OUTPUT"
-          else
-            echo 'stable_python=["3.12"]' >> "$GITHUB_OUTPUT"
-            echo 'run_nightly=false' >> "$GITHUB_OUTPUT"
-          fi
-
   test-stable:
-    needs: prepare
     strategy:
       fail-fast: false
       matrix:
-        # os: [macos, linux, windows]  # mac/windows self-hosted runners currently disabled
-        python_version: ${{ fromJSON(needs.prepare.outputs.stable_python) }}
-    # CUDA is the comfy-action default (12.1); bump alongside the matrix-expansion PR.
-    runs-on: [self-hosted, Linux]
+        # os: [macos, linux, windows]
+        os: [linux]
+        python_version: ["3.14", "3.13", "3.12", "3.11"]
+        cuda_version: ["13.2"]
+        torch_version: ["specific"]
+        include:
+          # - os: macos
+          #   runner_label: [self-hosted, macOS]
+          #   flags: "--use-pytorch-cross-attention"
+          - os: linux
+            runner_label: [self-hosted, Linux]
+            flags: ""
+          # - os: windows
+          #   runner_label: [self-hosted, Windows]
+          #   flags: ""
+    runs-on: ${{ matrix.runner_label }}
     steps:
       - name: Test Workflows
         uses: comfy-org/comfy-action@main
         with:
-          os: linux
+          os: ${{ matrix.os }}
           python_version: ${{ matrix.python_version }}
-          torch_version: stable
+          cuda_version: ${{ matrix.cuda_version }}
+          torch_version: ${{ matrix.torch_version }}
+          # Pin PyTorch 2.12 on CUDA 13.2 (cu132 wheel index). torchaudio is omitted
+          # on purpose: cu132 has no torchaudio build for these Python versions
+          # (it stops at 2.2.0/cp312). requirements.txt still lists torchaudio, so
+          # validate that leg once a runner exists — it may need to be made optional.
+          # NOTE: requires comfy-action to honor `torch_version: specific` on Linux
+          # (today macOS-only). Companion PR in comfy-org/comfy-action is required.
+          specific_torch_install: "pip install torch==2.12.* torchvision --index-url https://download.pytorch.org/whl/cu132"
           google_credentials: ${{ secrets.GCS_SERVICE_ACCOUNT_JSON }}
-          comfyui_flags: ""
+          comfyui_flags: ${{ matrix.flags }}
 
   test-unix-nightly:
-    needs: prepare
-    if: ${{ needs.prepare.outputs.run_nightly == 'true' }}
     strategy:
       fail-fast: false
       matrix:
+        # os: [macos, linux]
+        os: [linux]
         python_version: ["3.11"]
-    runs-on: [self-hosted, Linux]
+        cuda_version: ["13.2"]
+        torch_version: ["nightly"]
+        include:
+          # - os: macos
+          #   runner_label: [self-hosted, macOS]
+          #   flags: "--use-pytorch-cross-attention"
+          - os: linux
+            runner_label: [self-hosted, Linux]
+            flags: ""
+    runs-on: ${{ matrix.runner_label }}
     steps:
       - name: Test Workflows
         uses: comfy-org/comfy-action@main
         with:
-          os: linux
+          os: ${{ matrix.os }}
           python_version: ${{ matrix.python_version }}
-          torch_version: nightly
+          cuda_version: ${{ matrix.cuda_version }}
+          torch_version: ${{ matrix.torch_version }}
           google_credentials: ${{ secrets.GCS_SERVICE_ACCOUNT_JSON }}
-          comfyui_flags: ""
+          comfyui_flags: ${{ matrix.flags }}

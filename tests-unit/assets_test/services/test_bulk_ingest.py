@@ -1,5 +1,6 @@
 """Tests for bulk ingest services."""
 
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -156,6 +157,7 @@ class TestBatchInsertSeedAssets:
         file_path.write_bytes(b"shared model")
         monkeypatch.chdir(temp_dir)
         relative_path = file_path.name
+        absolute_path = os.path.abspath(relative_path)
 
         specs: list[SeedAssetSpec] = [
             {
@@ -170,7 +172,7 @@ class TestBatchInsertSeedAssets:
                 "mime_type": "application/safetensors",
             },
             {
-                "abs_path": str(file_path),
+                "abs_path": absolute_path,
                 "size_bytes": 12,
                 "mtime_ns": 1234567890000000000,
                 "info_name": "Shared Model",
@@ -188,7 +190,7 @@ class TestBatchInsertSeedAssets:
         assert result.won_paths == 1
         refs = session.query(AssetReference).all()
         assert len(refs) == 1
-        assert refs[0].file_path == str(file_path)
+        assert refs[0].file_path == absolute_path
         assert set(get_reference_tags(session, reference_id=refs[0].id)) == {
             "models",
             "model_type:checkpoints",

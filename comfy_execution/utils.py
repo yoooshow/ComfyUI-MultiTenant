@@ -29,6 +29,10 @@ def is_output_needed(output_index: int) -> bool:
 
     Returns True if the output might be used (should be computed).
     Returns False if the output is definitely not connected (safe to skip).
+
+    Only meaningful for LAZY_OUTPUTS nodes; for all others expected_outputs is
+    None and this always returns True (skipping without the flag would not be
+    reflected in the cache key).
     """
     ctx = get_executing_context()
     if ctx is None or ctx.expected_outputs is None:

@@ -561,7 +561,10 @@ async def execute(server, dynprompt, caches, current_item, extra_data, executed,
                 # TODO - How to handle this with async functions without contextvars (which requires Python 3.12)?
                 GraphBuilder.set_default_prefix(unique_id, call_index, 0)
 
-            expected_outputs = get_expected_outputs_for_node(dynprompt, unique_id)
+            if getattr(class_def, "LAZY_OUTPUTS", False):
+                expected_outputs = get_expected_outputs_for_node(dynprompt, unique_id)
+            else:
+                expected_outputs = None
             try:
                 output_data, output_ui, has_subgraph, has_pending_tasks = await get_output_data(prompt_id, unique_id, obj, input_data_all, execution_block_cb=execution_block_cb, pre_execute_cb=pre_execute_cb, v3_data=v3_data, expected_outputs=expected_outputs)
             finally:
@@ -620,6 +623,7 @@ async def execute(server, dynprompt, caches, current_item, extra_data, executed,
                         if is_link(node_outputs[i]):
                             from_node_id, from_socket = node_outputs[i][0], node_outputs[i][1]
                             new_output_links.append((from_node_id, from_socket))
+                            dynprompt.add_output_consumer(from_node_id, from_socket)
                     cached_outputs.append((True, node_outputs))
             new_node_ids = set(new_node_ids)
             for cache in caches.all:

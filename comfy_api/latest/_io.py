@@ -1655,7 +1655,11 @@ class Schema:
     """When True, cache will invalidate when output connections change, and expected_outputs will be available.
 
     Use this for nodes that can skip computing outputs that aren't connected downstream.
-    Access via `get_executing_context().expected_outputs` - outputs NOT in the set are definitely unused."""
+    Check `comfy_execution.utils.is_output_needed(i)` inside execute() - False means output i is definitely unused
+    and safe to skip. Only nodes with this flag receive expected_outputs; all others see None.
+
+    Limitation: consumers must exist before this node runs - a subgraph expansion that
+    hand-builds a link to a pre-existing node's already-skipped output reads a stale value."""
 
     def validate(self):
         '''Validate the schema:

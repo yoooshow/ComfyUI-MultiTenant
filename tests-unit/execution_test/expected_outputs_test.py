@@ -148,6 +148,45 @@ class TestGetExpectedOutputsForNode:
         assert expected == frozenset({0, 1})
 
 
+class TestExternalOutputConsumers:
+    """Tests for DynamicPrompt.add_output_consumer() — out-of-band consumers
+    (subgraph expansion output mappings) that have no input link in the prompt."""
+
+    def test_external_consumer_only(self):
+        """A socket consumed only externally must appear in expected outputs."""
+        prompt = {
+            "1": {"class_type": "SourceNode", "inputs": {}},
+        }
+        dynprompt = DynamicPrompt(prompt)
+        assert get_expected_outputs_for_node(dynprompt, "1") == frozenset()
+
+        dynprompt.add_output_consumer("1", 1)
+        assert get_expected_outputs_for_node(dynprompt, "1") == frozenset({1})
+
+    def test_external_consumer_merges_with_links(self):
+        """External consumers merge with input-link consumers."""
+        prompt = {
+            "1": {"class_type": "SourceNode", "inputs": {}},
+            "2": {"class_type": "ConsumerNode", "inputs": {"image": ["1", 0]}},
+        }
+        dynprompt = DynamicPrompt(prompt)
+        dynprompt.add_output_consumer("1", 2)
+        assert get_expected_outputs_for_node(dynprompt, "1") == frozenset({0, 2})
+
+    def test_external_consumer_invalidates_cached_map(self):
+        """Registering after the map was built must invalidate the cache."""
+        prompt = {
+            "1": {"class_type": "SourceNode", "inputs": {}},
+            "2": {"class_type": "ConsumerNode", "inputs": {"image": ["1", 0]}},
+        }
+        dynprompt = DynamicPrompt(prompt)
+        # Build (and cache) the map first
+        assert get_expected_outputs_for_node(dynprompt, "1") == frozenset({0})
+
+        dynprompt.add_output_consumer("1", 1)
+        assert get_expected_outputs_for_node(dynprompt, "1") == frozenset({0, 1})
+
+
 class TestExecutionContext:
     """Tests for ExecutionContext with expected_outputs field."""
 

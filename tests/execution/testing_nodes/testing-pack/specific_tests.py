@@ -6,7 +6,7 @@ from .tools import VariantSupport
 from comfy_execution.graph_utils import GraphBuilder
 from comfy.comfy_types.node_typing import ComfyNodeABC
 from comfy.comfy_types import IO
-from comfy_execution.utils import get_executing_context
+from comfy_execution.utils import get_executing_context, is_output_needed
 
 class TestLazyMixImages:
     @classmethod
@@ -510,27 +510,76 @@ class TestExpectedOutputs:
     CATEGORY = "_for_testing"
 
     def execute(self, height, width):
-        ctx = get_executing_context()
-
-        # Default: assume all outputs are expected (backwards compatibility)
-        output0_expected = True
-        output1_expected = True
-        output2_expected = True
-
-        if ctx is not None and ctx.expected_outputs is not None:
-            output0_expected = 0 in ctx.expected_outputs
-            output1_expected = 1 in ctx.expected_outputs
-            output2_expected = 2 in ctx.expected_outputs
-
         # Return white image if expected, black if not
         # This allows tests to verify which outputs were expected via pixel values
         white = torch.ones(1, height, width, 3)
         black = torch.zeros(1, height, width, 3)
 
         return (
-            white if output0_expected else black,
-            white if output1_expected else black,
-            white if output2_expected else black,
+            white if is_output_needed(0) else black,
+            white if is_output_needed(1) else black,
+            white if is_output_needed(2) else black,
+        )
+
+
+class TestExpectedOutputsExpansion:
+    """Expands into an inner LAZY_OUTPUTS node whose output 1 is consumed ONLY via
+    the parent-output mapping (no input link anywhere). If that mapping is not part
+    of the expected-outputs map, the inner node wrongly skips it -> black not white.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "height": ("INT", {"default": 64, "min": 1, "max": 1024}),
+                "width": ("INT", {"default": 64, "min": 1, "max": 1024}),
+            },
+        }
+
+    RETURN_TYPES = ("IMAGE",)
+    FUNCTION = "execute"
+    CATEGORY = "_for_testing"
+
+    def execute(self, height, width):
+        g = GraphBuilder()
+        inner = g.node("TestExpectedOutputs", height=height, width=width)
+        return {"result": (inner.out(1),), "expand": g.finalize()}
+
+
+class TestExpectedOutputsNotOptedIn:
+    """Reads expected_outputs WITHOUT declaring LAZY_OUTPUTS; the executor must pass
+    None (such nodes have no cache-key protection against output rewiring). Outputs
+    are white when the node correctly sees None, otherwise they encode membership.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "height": ("INT", {"default": 64, "min": 1, "max": 1024}),
+                "width": ("INT", {"default": 64, "min": 1, "max": 1024}),
+            },
+        }
+
+    RETURN_TYPES = ("IMAGE", "IMAGE")
+    RETURN_NAMES = ("output0", "output1")
+    FUNCTION = "execute"
+    CATEGORY = "_for_testing"
+
+    def execute(self, height, width):
+        # Raw context access (not is_output_needed): must distinguish None from a set
+        ctx = get_executing_context()
+        expected = ctx.expected_outputs if ctx is not None else None
+
+        white = torch.ones(1, height, width, 3)
+        black = torch.zeros(1, height, width, 3)
+
+        if expected is None:
+            return (white, white.clone())
+        return (
+            white if 0 in expected else black,
+            white if 1 in expected else black,
         )
 
 
@@ -551,6 +600,8 @@ TEST_NODE_CLASS_MAPPINGS = {
     "TestParallelSleep": TestParallelSleep,
     "TestOutputNodeWithSocketOutput": TestOutputNodeWithSocketOutput,
     "TestExpectedOutputs": TestExpectedOutputs,
+    "TestExpectedOutputsExpansion": TestExpectedOutputsExpansion,
+    "TestExpectedOutputsNotOptedIn": TestExpectedOutputsNotOptedIn,
 }
 
 TEST_NODE_DISPLAY_NAME_MAPPINGS = {
@@ -570,4 +621,6 @@ TEST_NODE_DISPLAY_NAME_MAPPINGS = {
     "TestParallelSleep": "Test Parallel Sleep",
     "TestOutputNodeWithSocketOutput": "Test Output Node With Socket Output",
     "TestExpectedOutputs": "Test Expected Outputs",
+    "TestExpectedOutputsExpansion": "Test Expected Outputs Expansion",
+    "TestExpectedOutputsNotOptedIn": "Test Expected Outputs Not Opted In",
 }

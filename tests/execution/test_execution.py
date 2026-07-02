@@ -672,6 +672,46 @@ class TestExecution:
         assert numpy.array(images0[0]).min() == 255, "Output 0 should be white"
         assert numpy.array(images2[0]).min() == 255, "Output 2 should be white"
 
+    def test_expected_outputs_expansion_output_mapping(self, client: ComfyClient, builder: GraphBuilder):
+        """A socket consumed only via an expansion's parent-output mapping must still
+        be in the inner LAZY_OUTPUTS node's expected_outputs (white, not black)."""
+        g = builder
+        expander = g.node("TestExpectedOutputsExpansion", height=80, width=80)
+        output = g.node("PreviewImage", images=expander.out(0))
+
+        result = client.run(g)
+
+        images = result.get_images(output)
+        assert len(images) == 1, "Should have 1 image"
+        assert numpy.array(images[0]).min() == 255, (
+            "Inner node skipped an output that is consumed via the expansion's "
+            "parent-output mapping (expected white, got black)"
+        )
+
+    def test_expected_outputs_requires_opt_in(self, client: ComfyClient, builder: GraphBuilder, server):
+        """Nodes without LAZY_OUTPUTS must see expected_outputs=None: their cache key
+        ignores topology, so a skipped output would be served stale after rewiring."""
+        g = builder
+        node = g.node("TestExpectedOutputsNotOptedIn", height=96, width=96)
+        output0 = g.node("PreviewImage", images=node.out(0))
+
+        # Only output 0 connected: correct gating -> node sees None, computes all
+        result1 = client.run(g)
+        assert numpy.array(result1.get_images(output0)[0]).min() == 255
+
+        # Connect output 1: key unchanged -> cache hit must still serve correct data
+        output1 = g.node("PreviewImage", images=node.out(1))
+        result2 = client.run(g)
+
+        if server["should_cache_results"]:
+            assert not result2.did_run(node), "Node should be a cache hit (key ignores topology)"
+        images1 = result2.get_images(output1)
+        assert len(images1) == 1, "Should have 1 image for output1"
+        assert numpy.array(images1[0]).min() == 255, (
+            "Non-opted-in node observed expected_outputs and skipped output 1; "
+            "the stale skipped value was then served from cache"
+        )
+
     def test_parallel_sleep_nodes(self, client: ComfyClient, builder: GraphBuilder, skip_timing_checks):
         # Warmup execution to ensure server is fully initialized
         run_warmup(client)

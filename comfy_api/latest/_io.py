@@ -1299,7 +1299,6 @@ class DynamicGroup(ComfyTypeI):
             group_name: str = "Group",
         ):
             super().__init__(id, display_name, optional, tooltip, lazy, extra_dict)
-            # Validate template entries: only WidgetInput subclasses, no nesting
             assert len(template) > 0, "DynamicGroup template must have at least one field."
             for t in template:
                 assert isinstance(t, WidgetInput), (
@@ -1310,7 +1309,6 @@ class DynamicGroup(ComfyTypeI):
                     f"DynamicGroup template field '{t.id}' must not be a DynamicInput. "
                     "Nesting dynamic inputs inside DynamicGroup is not supported."
                 )
-            # Enforce unique field ids within template
             field_ids = [t.id for t in template]
             assert len(field_ids) == len(set(field_ids)), (
                 f"DynamicGroup template field ids must be unique within a row. Got: {field_ids}"
@@ -1394,7 +1392,6 @@ class DynamicGroup(ComfyTypeI):
         for row in range(row_count):
             for field_id, field_value, is_required_field in field_specs:
                 slot_id = f"{finalized_prefix}.{row}.{field_id}"
-                # The first `min_rows` rows are required if the field itself is required
                 if row < min_rows and is_required_field:
                     out_dict["required"][slot_id] = field_value
                 else:

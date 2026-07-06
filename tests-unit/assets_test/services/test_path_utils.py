@@ -523,6 +523,42 @@ class TestLoaderPath:
         assert compute_logical_path(str(f)) == "models/not_registered/orphan.bin"
         assert compute_loader_path(str(f)) is None
 
+    def test_extension_mismatch_in_registered_bucket_has_no_loader_path(self, fake_dirs):
+        # Inside a registered bucket, but the bucket's extension set cannot
+        # load it: no model_type tag, and no loader path either.
+        f = fake_dirs["models"] / "notes.txt"
+        f.touch()
+
+        assert compute_logical_path(str(f)) == "models/checkpoints/notes.txt"
+        assert compute_loader_path(str(f)) is None
+
+    def test_shared_base_loader_path_uses_extension_matching_bucket(self, fake_dirs):
+        shared_root = fake_dirs["models"].parent / "unet"
+        shared_root.mkdir()
+        f = shared_root / "wan.gguf"
+        f.touch()
+
+        with patch(
+            "app.assets.services.path_utils.get_comfy_models_folders",
+            return_value=[
+                ("diffusion_models", [str(shared_root)], {".safetensors"}),
+                ("unet_gguf", [str(shared_root)], {".gguf"}),
+            ],
+        ):
+            assert compute_loader_path(str(f)) == "wan.gguf"
+
+    def test_match_all_bucket_provides_loader_path_for_any_extension(self, fake_dirs):
+        custom_root = fake_dirs["models"].parent / "custom_bucket"
+        custom_root.mkdir()
+        f = custom_root / "weights.bin"
+        f.touch()
+
+        with patch(
+            "app.assets.services.path_utils.get_comfy_models_folders",
+            return_value=[("custom_bucket", [str(custom_root)], set())],
+        ):
+            assert compute_loader_path(str(f)) == "weights.bin"
+
     def test_extra_path_model_has_loader_path_but_no_logical_path(self, tmp_path: Path):
         """Registered category base outside models_dir (extra_model_paths style).
 

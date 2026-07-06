@@ -209,8 +209,14 @@ def get_asset_category_and_relative_path(
         return "temp", _compute_relative(fp_abs, temp_base)
 
     # 4) models (check deepest matching base to avoid ambiguity)
+    ext = os.path.splitext(fp_abs)[1].lower()
     best: tuple[int, str, str] | None = None  # (base_len, bucket, rel_inside_bucket)
-    for bucket, bases, _exts in get_comfy_models_folders():
+    for bucket, bases, extensions in get_comfy_models_folders():
+        # A bucket only lists files within its extension set (empty set
+        # accepts any extension), so a bucket that cannot load the file
+        # must not contribute a loader path.
+        if extensions and ext not in extensions:
+            continue
         for b in bases:
             base_abs = os.path.abspath(b)
             if not _check_is_within(fp_abs, base_abs):

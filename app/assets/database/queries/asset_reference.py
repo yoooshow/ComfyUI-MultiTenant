@@ -688,13 +688,14 @@ def upsert_reference(
                 AssetReference.asset_id != asset_id,
                 AssetReference.mtime_ns.is_(None),
                 AssetReference.mtime_ns != int(mtime_ns),
+                AssetReference.loader_path.is_distinct_from(loader_path),
                 AssetReference.is_missing == True,  # noqa: E712
                 AssetReference.deleted_at.isnot(None),
             )
         )
         .values(
-            asset_id=asset_id, mtime_ns=int(mtime_ns), is_missing=False,
-            deleted_at=None, updated_at=now,
+            asset_id=asset_id, mtime_ns=int(mtime_ns), loader_path=loader_path,
+            is_missing=False, deleted_at=None, updated_at=now,
         )
     )
     res2 = session.execute(upd)

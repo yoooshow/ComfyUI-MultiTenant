@@ -80,7 +80,7 @@ def probe_audio_params(container: InputContainer, audio_stream, max_packets: int
         try:
             frames = packet.decode()
         except av.error.FFmpegError:
-            return 0, 0
+            frames = ()
         if frames:
             return frames[0].sample_rate, frames[0].layout.nb_channels
         if i >= max_packets:

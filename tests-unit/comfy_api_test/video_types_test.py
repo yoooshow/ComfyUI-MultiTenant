@@ -487,6 +487,13 @@ def test_save_to_transcode_learns_unprobed_audio_params():
     assert trimmed_before_audio["audio_codecs"] == []
     assert trimmed_before_audio["audio_seconds"] is None
 
+    buffer.seek(0)
+    trimmed_crossing_audio = transcode_and_probe(VideoFromFile(buffer, start_time=11.5, duration=1))
+    assert trimmed_crossing_audio["frames"] == fps
+    assert trimmed_crossing_audio["audio_codecs"] == ["aac"]
+    assert trimmed_crossing_audio["video_seconds"] == pytest.approx(1.0, abs=0.05)
+    assert trimmed_crossing_audio["audio_seconds"] == pytest.approx(0.5, abs=0.1)
+
 
 def test_save_to_transcode_trimmed_fragmented_mp4_keeps_audio():
     """Fragmented mp4 (MediaRecorder, DASH/HLS-derived files) delivers audio well behind

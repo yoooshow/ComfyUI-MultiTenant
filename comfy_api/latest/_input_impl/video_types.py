@@ -743,6 +743,8 @@ class VideoFromFile(VideoInput):
                             if to_skip >= resampled.samples:
                                 continue
                             audio_started = True
+                            if duration and frame_start > start_time:
+                                duration_cap = min(duration_cap, math.ceil((start_time + duration - frame_start) * sample_rate))
                             if to_skip:
                                 pending_audio.append(audio_frame_from_ndarray(resampled.to_ndarray()[..., to_skip:]))
                                 continue

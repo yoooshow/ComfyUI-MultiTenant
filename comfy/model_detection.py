@@ -232,6 +232,54 @@ def detect_unet_config(state_dict, key_prefix, metadata=None):
             dit_config["meanflow_sum"] = False
         return dit_config
 
+    if '{}patch_embedder.weight'.format(key_prefix) in state_dict_keys and '{}text_embedder.norm.weight'.format(key_prefix) in state_dict_keys and '{}blocks.0.attn.to_q.weight'.format(key_prefix) in state_dict_keys: # LingBot Video
+        dit_config = {}
+        patch_size = (1, 2, 2)
+        patch_prod = math.prod(patch_size)
+        patch_embed = state_dict['{}patch_embedder.weight'.format(key_prefix)]
+        proj_out = state_dict['{}proj_out.weight'.format(key_prefix)]
+        hidden_size = patch_embed.shape[0]
+        dit_config["image_model"] = "lingbot_video"
+        dit_config["patch_size"] = patch_size
+        dit_config["in_channels"] = 16
+        dit_config["out_channels"] = proj_out.shape[0] // patch_prod
+        dit_config["hidden_size"] = hidden_size
+        dit_config["num_attention_heads"] = hidden_size // 128
+        dit_config["depth"] = count_blocks(state_dict_keys, '{}blocks.'.format(key_prefix) + '{}.')
+        dit_config["text_dim"] = state_dict['{}text_embedder.norm.weight'.format(key_prefix)].shape[0]
+        dit_config["freq_dim"] = 256
+        dit_config["qkv_bias"] = '{}blocks.0.attn.to_q.bias'.format(key_prefix) in state_dict_keys
+        dit_config["out_bias"] = '{}blocks.0.attn.to_out.bias'.format(key_prefix) in state_dict_keys
+        dit_config["patch_embed_bias"] = '{}patch_embedder.bias'.format(key_prefix) in state_dict_keys
+        dit_config["timestep_mlp_bias"] = '{}time_embedder.linear_1.bias'.format(key_prefix) in state_dict_keys
+
+        moe_key = '{}blocks.0.ffn.experts.w1'.format(key_prefix)
+        if moe_key in state_dict_keys:
+            experts = state_dict[moe_key]
+            dit_config["num_experts"] = experts.shape[0]
+            dit_config["moe_intermediate_size"] = experts.shape[1]
+            if experts.shape[0] == 128:
+                dit_config["n_group"] = 4
+                dit_config["topk_group"] = 2
+                dit_config["routed_scaling_factor"] = 2.5
+            mlp_only_layers = []
+            for i in range(dit_config["depth"]):
+                if '{}blocks.{}.ffn.gate_proj.weight'.format(key_prefix, i) in state_dict_keys:
+                    mlp_only_layers.append(i)
+            dit_config["mlp_only_layers"] = tuple(mlp_only_layers)
+            if len(mlp_only_layers) > 0:
+                dit_config["intermediate_size"] = state_dict['{}blocks.{}.ffn.gate_proj.weight'.format(key_prefix, mlp_only_layers[0])].shape[0]
+            if '{}blocks.0.ffn.shared_experts.gate_proj.weight'.format(key_prefix) in state_dict_keys:
+                shared = state_dict['{}blocks.0.ffn.shared_experts.gate_proj.weight'.format(key_prefix)]
+                dit_config["n_shared_experts"] = shared.shape[0] // experts.shape[1]
+        else:
+            dit_config["num_experts"] = 0
+            dit_config["intermediate_size"] = state_dict['{}blocks.0.ffn.gate_proj.weight'.format(key_prefix)].shape[0]
+
+        if metadata is not None and "config" in metadata:
+            dit_config.update(json.loads(metadata["config"]).get("transformer", {}))
+        return dit_config
+
     if any_suffix_in(state_dict_keys, key_prefix, 'double_blocks.0.img_attn.norm.key_norm.', ["weight", "scale"]) and ('{}img_in.weight'.format(key_prefix) in state_dict_keys or any_suffix_in(state_dict_keys, key_prefix, 'distilled_guidance_layer.norms.0.', ["weight", "scale"])): #Flux, Chroma or Chroma Radiance (has no img_in.weight)
         dit_config = {}
         if '{}double_stream_modulation_img.lin.weight'.format(key_prefix) in state_dict_keys:

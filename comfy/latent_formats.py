@@ -540,6 +540,9 @@ class Wan21(LatentFormat):
         latents_std = self.latents_std.to(latent.device, latent.dtype)
         return latent * latents_std / self.scale_factor + latents_mean
 
+class LingBotVideo(Wan21):
+    pass
+
 class Wan22(Wan21):
     latent_channels = 48
     latent_dimensions = 3

@@ -63,6 +63,7 @@ import comfy.ldm.kandinsky5.model
 import comfy.ldm.anima.model
 import comfy.ldm.ace.ace_step15
 import comfy.ldm.cogvideo.model
+import comfy.ldm.lingbot_video.model
 import comfy.ldm.rt_detr.rtdetr_v4
 import comfy.ldm.ernie.model
 import comfy.ldm.sam3.detector
@@ -1375,6 +1376,20 @@ class HunyuanVideoSkyreelsI2V(HunyuanVideo):
 
     def scale_latent_inpaint(self, latent_image, **kwargs):
         return super().scale_latent_inpaint(latent_image=latent_image, **kwargs)
+
+class LingBotVideo(BaseModel):
+    def __init__(self, model_config, model_type=ModelType.FLOW, device=None):
+        super().__init__(model_config, model_type, device=device, unet_model=comfy.ldm.lingbot_video.model.LingBotVideo)
+
+    def extra_conds(self, **kwargs):
+        out = super().extra_conds(**kwargs)
+        cross_attn = kwargs.get("cross_attn", None)
+        if cross_attn is not None:
+            out["c_crossattn"] = comfy.conds.CONDRegular(cross_attn)
+        return out
+
+    def scale_latent_inpaint(self, latent_image, **kwargs):
+        return latent_image
 
 class CosmosVideo(BaseModel):
     def __init__(self, model_config, model_type=ModelType.EDM, image_to_video=False, device=None):

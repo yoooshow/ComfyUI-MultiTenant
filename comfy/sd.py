@@ -69,6 +69,7 @@ import comfy.text_encoders.ace15
 import comfy.text_encoders.longcat_image
 import comfy.text_encoders.qwen35
 import comfy.text_encoders.qwen3vl
+import comfy.text_encoders.lingbot_video
 import comfy.text_encoders.boogu
 import comfy.text_encoders.ernie
 import comfy.text_encoders.gemma4
@@ -1313,6 +1314,7 @@ class CLIPType(Enum):
     IDEOGRAM4 = 30
     BOOGU = 31
     KREA2 = 32
+    LINGBOT_VIDEO = 33
 
 
 
@@ -1646,6 +1648,10 @@ def load_text_encoder_state_dicts(state_dicts=[], embedding_directory=None, clip
                 klein_model_type = "qwen3_8b" if te_model == TEModel.QWEN3VL_8B else "qwen3_4b"
                 clip_target.clip = comfy.text_encoders.flux.klein_te(**llama_detect(clip_data), model_type=klein_model_type)
                 clip_target.tokenizer = comfy.text_encoders.flux.KleinTokenizer8B if te_model == TEModel.QWEN3VL_8B else comfy.text_encoders.flux.KleinTokenizer
+            elif clip_type == CLIPType.LINGBOT_VIDEO and te_model == TEModel.QWEN3VL_4B:
+                clip_data[0] = comfy.utils.state_dict_prefix_replace(clip_data[0], {"model.language_model.": "model.", "model.visual.": "visual.", "lm_head.": "model.lm_head."})
+                clip_target.clip = comfy.text_encoders.lingbot_video.te(**llama_detect(clip_data), model_type="qwen3vl_4b")
+                clip_target.tokenizer = comfy.text_encoders.lingbot_video.tokenizer(model_type="qwen3vl_4b")
             else:
                 clip_data[0] = comfy.utils.state_dict_prefix_replace(clip_data[0], {"model.language_model.": "model.", "model.visual.": "visual.", "lm_head.": "model.lm_head."})
                 qwen3vl_type = {TEModel.QWEN3VL_4B: "qwen3vl_4b", TEModel.QWEN3VL_8B: "qwen3vl_8b"}[te_model]

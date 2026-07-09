@@ -27,6 +27,8 @@ import comfy.text_encoders.z_image
 import comfy.text_encoders.ideogram4
 import comfy.text_encoders.boogu
 import comfy.text_encoders.krea2
+import comfy.text_encoders.qwen3vl
+import comfy.text_encoders.lingbot_video
 import comfy.text_encoders.anima
 import comfy.text_encoders.ace15
 import comfy.text_encoders.longcat_image
@@ -1022,6 +1024,40 @@ class HunyuanVideoSkyreelsI2V(HunyuanVideo):
     def get_model(self, state_dict, prefix="", device=None):
         out = model_base.HunyuanVideoSkyreelsI2V(self, device=device)
         return out
+
+class LingBotVideo(supported_models_base.BASE):
+    unet_config = {
+        "image_model": "lingbot_video",
+    }
+
+    sampling_settings = {
+        "shift": 3.0,
+    }
+
+    unet_extra_config = {}
+    latent_format = latent_formats.LingBotVideo
+
+    memory_usage_factor = 1.8
+
+    supported_inference_dtypes = [torch.bfloat16, torch.float32]
+
+    vae_key_prefix = ["vae."]
+    text_encoder_key_prefix = ["text_encoders."]
+
+    def __init__(self, unet_config):
+        super().__init__(unet_config)
+        self.memory_usage_factor = self.memory_usage_factor * (unet_config.get("hidden_size", 2048) / 2048)
+
+    def get_model(self, state_dict, prefix="", device=None):
+        return model_base.LingBotVideo(self, device=device)
+
+    def clip_target(self, state_dict={}):
+        pref = self.text_encoder_key_prefix[0]
+        qwen3vl_detect = comfy.text_encoders.hunyuan_video.llama_detect(state_dict, "{}qwen3vl_4b.transformer.".format(pref))
+        if len(qwen3vl_detect) > 0:
+            qwen3vl_detect["model_type"] = "qwen3vl_4b"
+            return supported_models_base.ClipTarget(comfy.text_encoders.lingbot_video.tokenizer(model_type="qwen3vl_4b"), comfy.text_encoders.lingbot_video.te(**qwen3vl_detect))
+        return None
 
 class CosmosT2V(supported_models_base.BASE):
     unet_config = {
@@ -2317,6 +2353,7 @@ models = [
     HunyuanVideoSkyreelsI2V,
     HunyuanVideoI2V,
     HunyuanVideo,
+    LingBotVideo,
     CosmosT2V,
     CosmosI2V,
     CosmosT2IPredict2,

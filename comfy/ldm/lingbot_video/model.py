@@ -10,18 +10,6 @@ from comfy.ldm.flux.layers import timestep_embedding
 from comfy.ldm.modules.attention import optimized_attention
 
 
-class LingBotVideoRMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6, device=None, dtype=None, operations=None):
-        super().__init__()
-        self.weight = nn.Parameter(torch.empty(dim, device=device, dtype=dtype))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states
-
-
 class LingBotVideoRotaryEmbedding(nn.Module):
     def __init__(self, axes_dims: Tuple[int, ...], axes_lens: Tuple[int, ...], theta: float):
         super().__init__()
@@ -72,7 +60,7 @@ class LingBotVideoTextEmbedder(nn.Module):
 
     def __init__(self, text_dim: int, hidden_size: int, device=None, dtype=None, operations=None):
         super().__init__()
-        self.norm = LingBotVideoRMSNorm(text_dim, eps=1e-6, device=device, dtype=dtype, operations=operations)
+        self.norm = operations.RMSNorm(text_dim, eps=1e-6, elementwise_affine=True, device=device, dtype=dtype)
         self.linear_1 = operations.Linear(text_dim, hidden_size, bias=True, device=device, dtype=dtype)
         self.linear_2 = operations.Linear(hidden_size, hidden_size, bias=True, device=device, dtype=dtype)
 
@@ -89,8 +77,8 @@ class LingBotVideoAttention(nn.Module):
         self.to_q = operations.Linear(hidden_size, hidden_size, bias=qkv_bias, device=device, dtype=dtype)
         self.to_k = operations.Linear(hidden_size, hidden_size, bias=qkv_bias, device=device, dtype=dtype)
         self.to_v = operations.Linear(hidden_size, hidden_size, bias=qkv_bias, device=device, dtype=dtype)
-        self.norm_q = LingBotVideoRMSNorm(self.head_dim, norm_eps, device=device, dtype=dtype, operations=operations)
-        self.norm_k = LingBotVideoRMSNorm(self.head_dim, norm_eps, device=device, dtype=dtype, operations=operations)
+        self.norm_q = operations.RMSNorm(self.head_dim, eps=norm_eps, elementwise_affine=True, device=device, dtype=dtype)
+        self.norm_k = operations.RMSNorm(self.head_dim, eps=norm_eps, elementwise_affine=True, device=device, dtype=dtype)
         self.to_out = operations.Linear(hidden_size, hidden_size, bias=out_bias, device=device, dtype=dtype)
 
     def forward(
@@ -284,12 +272,12 @@ class LingBotVideoBlock(nn.Module):
         self.layer_idx = layer_idx
         h = hidden_size
         self.scale_shift_table = nn.Parameter(torch.empty(1, 6 * h, device=device, dtype=dtype))
-        self.norm1 = LingBotVideoRMSNorm(h, norm_eps, device=device, dtype=dtype, operations=operations)
+        self.norm1 = operations.RMSNorm(h, eps=norm_eps, elementwise_affine=True, device=device, dtype=dtype)
         self.attn = LingBotVideoAttention(
             h, num_attention_heads, norm_eps, qkv_bias, out_bias, device=device, dtype=dtype, operations=operations
         )
-        self.norm_post_attn = LingBotVideoRMSNorm(h, norm_eps, device=device, dtype=dtype, operations=operations)
-        self.norm2 = LingBotVideoRMSNorm(h, norm_eps, device=device, dtype=dtype, operations=operations)
+        self.norm_post_attn = operations.RMSNorm(h, eps=norm_eps, elementwise_affine=True, device=device, dtype=dtype)
+        self.norm2 = operations.RMSNorm(h, eps=norm_eps, elementwise_affine=True, device=device, dtype=dtype)
         # Sparsity decision matches MoEBlock: mlp_only_layers + decoder_sparse_step + num_experts
         if layer_idx not in mlp_only_layers and (
             num_experts > 0 and (layer_idx + 1) % decoder_sparse_step == 0
@@ -302,7 +290,7 @@ class LingBotVideoBlock(nn.Module):
             )
         else:
             self.ffn = LingBotVideoMLP(h, intermediate_size, device=device, dtype=dtype, operations=operations)
-        self.norm_post_ffn = LingBotVideoRMSNorm(h, norm_eps, device=device, dtype=dtype, operations=operations)
+        self.norm_post_ffn = operations.RMSNorm(h, eps=norm_eps, elementwise_affine=True, device=device, dtype=dtype)
 
     def forward(
         self,

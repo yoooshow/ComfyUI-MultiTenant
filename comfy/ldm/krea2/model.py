@@ -15,6 +15,7 @@ from einops import rearrange
 import comfy.model_management
 import comfy.patcher_extension
 import comfy.ldm.common_dit
+import comfy.utils
 from comfy.ldm.flux.layers import EmbedND, timestep_embedding
 from comfy.ldm.flux.math import apply_rope
 from comfy.ldm.modules.attention import optimized_attention_masked
@@ -158,8 +159,44 @@ class SingleStreamBlock(nn.Module):
         self.attn = Attention(features, heads, kvheads=kvheads, bias=bias, device=device, dtype=dtype, operations=operations)
         self.mlp = SwiGLU(features, multiplier, bias, device=device, dtype=dtype, operations=operations)
 
-    def forward(self, x, vec, freqs, mask=None, transformer_options={}):
+    def forward(self, x, vec, freqs, mask=None, timestep_zero_index=None, transformer_options={}):
         prescale, preshift, pregate, postscale, postshift, postgate = self.mod(vec)
+        if timestep_zero_index is not None:
+            bs = x.shape[0]
+            ref_prescale = prescale[bs:]
+            ref_preshift = preshift[bs:]
+            ref_pregate = pregate[bs:]
+            ref_postscale = postscale[bs:]
+            ref_postshift = postshift[bs:]
+            ref_postgate = postgate[bs:]
+            prescale = prescale[:bs]
+            preshift = preshift[:bs]
+            pregate = pregate[:bs]
+            postscale = postscale[:bs]
+            postshift = postshift[:bs]
+            postgate = postgate[:bs]
+
+            pre = self.prenorm(x)
+            pre[:, :timestep_zero_index].mul_(1 + prescale).add_(preshift)
+            pre[:, timestep_zero_index:].mul_(1 + ref_prescale).add_(ref_preshift)
+            attn = self.attn(pre, freqs, mask, transformer_options=transformer_options)
+            del pre
+            attn[:, :timestep_zero_index].mul_(pregate)
+            attn[:, timestep_zero_index:].mul_(ref_pregate)
+            x = x + attn
+            del attn
+
+            post = self.postnorm(x)
+            post[:, :timestep_zero_index].mul_(1 + postscale).add_(postshift)
+            post[:, timestep_zero_index:].mul_(1 + ref_postscale).add_(ref_postshift)
+            mlp = self.mlp(post)
+            del post
+            mlp[:, :timestep_zero_index].mul_(postgate)
+            mlp[:, timestep_zero_index:].mul_(ref_postgate)
+            x = x + mlp
+            del mlp
+            return x
+
         x = x + pregate * self.attn((1 + prescale) * self.prenorm(x) + preshift, freqs, mask, transformer_options=transformer_options)
         x = x + postgate * self.mlp((1 + postscale) * self.postnorm(x) + postshift)
         return x
@@ -221,61 +258,96 @@ class SingleStreamDiT(nn.Module):
             operations.Linear(features, features * 6, device=device, dtype=dtype),
         )
 
-    def forward(self, x, timesteps, context, attention_mask=None, transformer_options={}, **kwargs):
+    def forward(self, x, timesteps, context, attention_mask=None, ref_latents=None, transformer_options={}, **kwargs):
         return comfy.patcher_extension.WrapperExecutor.new_class_executor(
             self._forward,
             self,
             comfy.patcher_extension.get_all_wrappers(comfy.patcher_extension.WrappersMP.DIFFUSION_MODEL, transformer_options),
-        ).execute(x, timesteps, context, attention_mask, transformer_options, **kwargs)
+        ).execute(x, timesteps, context, attention_mask, ref_latents, transformer_options, **kwargs)
 
-    def _forward(self, x, timesteps, context, attention_mask=None, transformer_options={}, **kwargs):
+    def process_img(self, x, index=0):
+        patch = self.patch
+        x = comfy.ldm.common_dit.pad_to_patch_size(x, (patch, patch))
+        h, w = x.shape[-2] // patch, x.shape[-1] // patch
+        img = rearrange(x, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=patch, pw=patch)
+
+        img_ids = torch.zeros(h, w, 3, device=x.device, dtype=torch.float32)
+        img_ids[..., 0] = index
+        img_ids[..., 1] = torch.arange(h, device=x.device, dtype=torch.float32)[:, None]
+        img_ids[..., 2] = torch.arange(w, device=x.device, dtype=torch.float32)[None, :]
+        return img, img_ids.reshape(1, h * w, 3).repeat(x.shape[0], 1, 1), h, w
+
+    def _forward(self, x, timesteps, context, attention_mask=None, ref_latents=None, transformer_options={}, **kwargs):
         temporal = x.ndim == 5
         if temporal:
             b5, c5, t5, h5, w5 = x.shape
             x = x.reshape(b5 * t5, c5, h5, w5)
-        bs, c, H_orig, W_orig = x.shape
+        bs, _, h_orig, w_orig = x.shape
         patch = self.patch
-        # Pad the latent up to a multiple of patch (as Flux/Lumina/QwenImage do); crop back at the end.
-        x = comfy.ldm.common_dit.pad_to_patch_size(x, (patch, patch))
-        H, W = x.shape[-2], x.shape[-1]
-        h_, w_ = H // patch, W // patch
 
         # context arrives as (B, seq, txtlayers*txtdim); reshape to (B, txtlayers, seq, txtdim).
         context = self._unpack_context(context)
 
-        img = rearrange(x, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=patch, pw=patch)
+        img, imgpos, h_, w_ = self.process_img(x)
+        img_tokens = img.shape[1]
+        timestep_zero_index = None
+        if ref_latents is not None and len(ref_latents) > 0:
+            ref_tokens = []
+            ref_pos = []
+            ref_num_tokens = []
+            for index, ref in enumerate(ref_latents, 1):
+                if ref.ndim == 5:
+                    rb, rc, rt, rh5, rw5 = ref.shape
+                    ref = ref.reshape(rb * rt, rc, rh5, rw5)
+                ref = comfy.utils.repeat_to_batch_size(ref, bs)
+                kontext, kontext_ids, _, _ = self.process_img(ref, index=index)
+                ref_tokens.append(kontext)
+                ref_pos.append(kontext_ids)
+                ref_num_tokens.append(kontext.shape[1])
+            img = torch.cat([img] + ref_tokens, dim=1)
+            imgpos = torch.cat([imgpos] + ref_pos, dim=1)
+            del ref_tokens, ref_pos
+            timestep_zero_index = img_tokens
+            transformer_options = transformer_options.copy()
+            transformer_options["reference_image_num_tokens"] = ref_num_tokens
+
         img = self.first(img)
 
         t = self.tmlp(timestep_embedding(timesteps, self.tdim).unsqueeze(1).to(img.dtype))
         tvec = self.tproj(t)
+        if timestep_zero_index is not None:
+            t0 = self.tmlp(timestep_embedding(torch.zeros_like(timesteps), self.tdim).unsqueeze(1).to(img.dtype))
+            tvec = torch.cat((tvec, self.tproj(t0)), dim=0)
 
         context = self.txtfusion(context, mask=None, transformer_options=transformer_options)
         context = self.txtmlp(context)
 
-        txtlen, imglen = context.shape[1], img.shape[1]
+        txtlen = context.shape[1]
         combined = torch.cat((context, img), dim=1)
+        del context, img
+        if timestep_zero_index is not None:
+            timestep_zero_index += txtlen
 
         # Position ids: text at 0, image at (0, h_idx, w_idx).
         device = combined.device
         txtpos = torch.zeros(bs, txtlen, 3, device=device, dtype=torch.float32)
-        imgids = torch.zeros(h_, w_, 3, device=device, dtype=torch.float32)
-        imgids[..., 1] = torch.arange(h_, device=device, dtype=torch.float32)[:, None]
-        imgids[..., 2] = torch.arange(w_, device=device, dtype=torch.float32)[None, :]
-        imgpos = imgids.reshape(1, h_ * w_, 3).repeat(bs, 1, 1)
         pos = torch.cat((txtpos, imgpos), dim=1)
+        del txtpos, imgpos
 
         freqs = self.pe_embedder(pos)
+        del pos
 
         for block in self.blocks:
-            combined = block(combined, tvec, freqs, None, transformer_options=transformer_options)
+            combined = block(combined, tvec, freqs, None, timestep_zero_index=timestep_zero_index, transformer_options=transformer_options)
 
         final = self.last(combined, t)
-        out = final[:, txtlen:txtlen + imglen, :]
+        del combined
+        out = final[:, txtlen:txtlen + img_tokens, :]
         out = rearrange(out, "b (h w) (c ph pw) -> b c (h ph) (w pw)",
                         h=h_, w=w_, ph=patch, pw=patch, c=self.channels)
-        out = out[:, :, :H_orig, :W_orig]  # crop padding back off
+        out = out[:, :, :h_orig, :w_orig]  # crop padding back off
         if temporal:
-            out = out.reshape(b5, t5, self.channels, H_orig, W_orig).movedim(1, 2)
+            out = out.reshape(b5, t5, self.channels, h_orig, w_orig).movedim(1, 2)
         return out
 
     def _unpack_context(self, context):

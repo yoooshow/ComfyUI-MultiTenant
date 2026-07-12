@@ -57,6 +57,28 @@ class ProbeResult:
         return (self.error_code or "").lower() == "gatedrepo"
 
 
+def _error_detail(error_code: Optional[str], error_message: Optional[str]) -> str:
+    """Format the host's ``X-Error-Code``/``X-Error-Message`` for logs/messages."""
+    detail = ": ".join(p.strip() for p in (error_code, error_message) if p and p.strip())
+    return f" ({detail})" if detail else ""
+
+
+def _probe_failure_message(
+    status: int, error_code: Optional[str], error_message: Optional[str]
+) -> str:
+    msg = f"probe returned HTTP {status}{_error_detail(error_code, error_message)}"
+    if status == 404:
+        # HuggingFace returns 404 (not 403) for a private repo the current
+        # credentials cannot see, so it is indistinguishable from a missing
+        # file without the hint. Name both causes so the user can check the
+        # URL or their access/token scope.
+        msg += (
+            " — the file may not exist, or it is private/gated and the "
+            "credentials in use lack access to it"
+        )
+    return msg
+
+
 def _total_from_content_range(value: Optional[str]) -> Optional[int]:
     # "bytes 0-0/12345" -> 12345 ; "bytes 0-0/*" -> None
     if not value or "/" not in value:
@@ -87,9 +109,16 @@ async def probe(url: str) -> ProbeResult:
             headers={"Range": "bytes=0-0", "Accept-Encoding": "identity"},
             timeout=_PROBE_TIMEOUT,
         ) as (resp, final_url):
+            # HuggingFace (and some others) report the real reason in these
+            # headers on any status, including 404 for a private/missing repo.
+            error_code = resp.headers.get("X-Error-Code")
+            error_message = resp.headers.get("X-Error-Message")
             if resp.status in (401, 403):
-                error_code = resp.headers.get("X-Error-Code")
-                error_message = resp.headers.get("X-Error-Message")
+                logging.warning(
+                    "[model_downloader] probe %s -> HTTP %d%s",
+                    redact_url(final_url or url), resp.status,
+                    _error_detail(error_code, error_message),
+                )
                 return ProbeResult(
                     ok=False, status=resp.status, final_url=final_url, gated=True,
                     error_code=error_code,
@@ -99,9 +128,15 @@ async def probe(url: str) -> ProbeResult:
                     ),
                 )
             if resp.status not in (200, 206):
+                logging.warning(
+                    "[model_downloader] probe %s -> HTTP %d%s",
+                    redact_url(final_url or url), resp.status,
+                    _error_detail(error_code, error_message),
+                )
                 return ProbeResult(
                     ok=False, status=resp.status, final_url=final_url,
-                    error=f"probe returned HTTP {resp.status}",
+                    error_code=error_code,
+                    error=_probe_failure_message(resp.status, error_code, error_message),
                 )
 
             headers = resp.headers

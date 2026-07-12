@@ -64,7 +64,7 @@ PROVIDERS: dict[str, Provider] = {
         host="huggingface.co",
         authorize_url="https://huggingface.co/oauth/authorize",
         token_url="https://huggingface.co/oauth/token",
-        scope="openid gated-repos",
+        scope="openid read-repos gated-repos",
         env_keys=("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN"),
         client_id_env="COMFY_HF_OAUTH_CLIENT_ID",
     ),

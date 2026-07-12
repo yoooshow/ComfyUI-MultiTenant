@@ -234,13 +234,39 @@ def test_login_start_and_in_progress(monkeypatch, auth_tmp):
     asyncio.run(_run())
 
 
-def _redirect_port(authorize_url: str) -> int:
-    redirect = parse_qs(urlsplit(authorize_url).query)["redirect_uri"][0]
-    return urlsplit(redirect).port
+def _redirect_uri(authorize_url: str) -> str:
+    return parse_qs(urlsplit(authorize_url).query)["redirect_uri"][0]
 
 
-def test_concurrent_logins_different_providers(monkeypatch, auth_tmp):
-    """Two providers can log in at once — each binds its own loopback port."""
+def test_callback_uri_is_fixed_loopback_port(monkeypatch, auth_tmp):
+    """The redirect targets the fixed loopback port, ignoring the request Host.
+
+    In dev the UI is served by Vite on a different port that proxies ``/api``,
+    so the login request arrives with the frontend port in ``Host``; the
+    callback URI must stay pinned to the registered loopback port.
+    """
+    monkeypatch.setenv("COMFY_HF_OAUTH_CLIENT_ID", "hf-client")
+
+    async def _run():
+        try:
+            req = make_mocked_request(
+                "POST", "/api/download/auth/huggingface/login",
+                headers={"Host": "localhost:5173"},
+                match_info={"provider": "huggingface"},
+            )
+            resp = await routes.auth_login(req)
+            redirect = _redirect_uri(json.loads(resp.body)["authorize_url"])
+            assert redirect == f"http://127.0.0.1:{oauth.CALLBACK_PORT}/callback/huggingface"
+        finally:
+            flow = oauth._ACTIVE.get("huggingface")
+            if flow is not None:
+                await flow._teardown()
+
+    asyncio.run(_run())
+
+
+def test_second_login_rejected_single_flight(monkeypatch, auth_tmp):
+    """Only one login runs at a time — the shared callback port is single-flight."""
     monkeypatch.setenv("COMFY_HF_OAUTH_CLIENT_ID", "hf-client")
     monkeypatch.setenv("COMFY_CIVITAI_OAUTH_CLIENT_ID", "civ-client")
 
@@ -252,22 +278,95 @@ def test_concurrent_logins_different_providers(monkeypatch, auth_tmp):
                     match_info={"provider": "huggingface"},
                 )
             )
+            assert hf.status == 200
+            # a different provider can't start while HF holds the callback port
             civ = await routes.auth_login(
                 make_mocked_request(
                     "POST", "/api/download/auth/civitai/login",
                     match_info={"provider": "civitai"},
                 )
             )
-            assert hf.status == 200 and civ.status == 200
-            hf_port = _redirect_port(json.loads(hf.body)["authorize_url"])
-            civ_port = _redirect_port(json.loads(civ.body)["authorize_url"])
-            # distinct, OS-assigned loopback ports (no fixed-port collision)
-            assert hf_port and civ_port and hf_port != civ_port
+            assert civ.status == 409
+            assert json.loads(civ.body)["error"]["code"] == "LOGIN_IN_PROGRESS"
+            assert oauth.login_in_progress("huggingface")
+            assert not oauth.login_in_progress("civitai")
         finally:
             for name in ("huggingface", "civitai"):
                 flow = oauth._ACTIVE.get(name)
                 if flow is not None:
                     await flow._teardown()
+
+    asyncio.run(_run())
+
+
+def test_callback_completes_login(monkeypatch, auth_tmp):
+    """The loopback callback exchanges the code, stores the token, tears down."""
+    monkeypatch.setenv("COMFY_HF_OAUTH_CLIENT_ID", "hf-client")
+    _clear_env(monkeypatch, *_HF_ENV)
+
+    async def fake_exchange(provider, code, verifier, redirect_uri):
+        assert code == "the-code"
+        return Token(access_token="acc_from_callback")
+
+    monkeypatch.setattr(oauth, "exchange_code", fake_exchange)
+
+    async def _run():
+        try:
+            login = await routes.auth_login(
+                make_mocked_request(
+                    "POST", "/api/download/auth/huggingface/login",
+                    match_info={"provider": "huggingface"},
+                )
+            )
+            assert login.status == 200
+            flow = oauth._ACTIVE["huggingface"]
+            cb = await flow._handle_callback(
+                make_mocked_request(
+                    "GET",
+                    f"/callback/huggingface?state={flow.state}&code=the-code",
+                    match_info={"provider": "huggingface"},
+                )
+            )
+            assert cb.status == 200
+            assert "window.close" in cb.text
+            assert AUTH_STORE.status(PROVIDERS["huggingface"])["logged_in"] is True
+            # the handler schedules its own teardown; let it run
+            await asyncio.sleep(0.05)
+            assert not oauth.login_in_progress("huggingface")
+        finally:
+            flow = oauth._ACTIVE.get("huggingface")
+            if flow is not None:
+                await flow._teardown()
+
+    asyncio.run(_run())
+
+
+def test_callback_rejects_bad_state(monkeypatch, auth_tmp):
+    monkeypatch.setenv("COMFY_HF_OAUTH_CLIENT_ID", "hf-client")
+
+    async def _run():
+        try:
+            await routes.auth_login(
+                make_mocked_request(
+                    "POST", "/api/download/auth/huggingface/login",
+                    match_info={"provider": "huggingface"},
+                )
+            )
+            flow = oauth._ACTIVE["huggingface"]
+            cb = await flow._handle_callback(
+                make_mocked_request(
+                    "GET",
+                    "/callback/huggingface?state=wrong&code=x",
+                    match_info={"provider": "huggingface"},
+                )
+            )
+            assert cb.status == 400
+            # the flow stays pending so a genuine callback can still arrive
+            assert oauth.login_in_progress("huggingface")
+        finally:
+            flow = oauth._ACTIVE.get("huggingface")
+            if flow is not None:
+                await flow._teardown()
 
     asyncio.run(_run())
 

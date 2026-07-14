@@ -58,13 +58,16 @@ def get_comfy_api_headers(node_cls: type[IO.ComfyNode]) -> dict[str, str]:
     relative/cloud URLs resolved against ``default_base_url()``; because the result
     includes auth, callers must not attach it to arbitrary absolute/presigned URLs.
     """
-    return {
+    headers = {
         **get_auth_header(node_cls),
         "Comfy-Env": get_deploy_environment(),
         "Comfy-Usage-Source": get_usage_source(node_cls),
         "Comfy-Core-Version": comfyui_version,
-        "Comfy-Job-Id": get_executing_context().prompt_id,
     }
+    ctx = get_executing_context()
+    if ctx is not None:
+        headers["Comfy-Job-Id"] = ctx.prompt_id
+    return headers
 
 
 def default_base_url() -> str:

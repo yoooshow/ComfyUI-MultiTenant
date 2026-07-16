@@ -39,6 +39,11 @@ _LOOKS_PATH = "/proxy/heygen/v3/avatars/looks"
 
 _DEFAULT_VOICE_OPTION = "(avatar's default voice)"
 
+_AVATARS_BY_ENGINE = {
+    e: [label for label, (_aid, _atype, engines) in HEYGEN_AVATAR_MAP.items() if e in engines]
+    for e in ("avatar_iv", "avatar_iii", "avatar_v")
+}
+
 
 async def _apply_speech_source(cls: type[IO.ComfyNode], payload: dict, speech: dict, require_voice: bool) -> None:
     """Fill script/audio speech fields of a /v3/videos payload from the DynamicCombo dict."""
@@ -98,6 +103,7 @@ async def _resolve_avatar(
             )
         ).get("data") or {}
         avatar_id = custom_avatar_id
+        avatar_label = look.get("name") or custom_avatar_id
         supported = look.get("supported_api_engines") or []
     else:
         avatar_id, avatar_type, supported = HEYGEN_AVATAR_MAP[avatar_label]
@@ -106,6 +112,12 @@ async def _resolve_avatar(
         engine = next((e for e in ("avatar_iv", "avatar_iii", "avatar_v") if e in supported), None)
     else:
         engine = engine_choice
+        if supported and engine not in supported:
+            raise ValueError(
+                f"Avatar '{avatar_label}' does not support the {engine} engine "
+                f"(supported: {', '.join(supported)}). Set engine to 'auto' to pick "
+                "a compatible engine automatically."
+            )
     return avatar_id, engine
 
 
@@ -254,10 +266,55 @@ class HeyGenAvatarVideoNode(IO.ComfyNode):
             description="Generate a talking-presenter video from a HeyGen avatar. "
             "Includes HeyGen's most popular public avatars; any look ID can be supplied as an override.",
             inputs=[
-                IO.Combo.Input(
-                    "avatar",
-                    options=HEYGEN_AVATAR_OPTIONS,
-                    tooltip="Avatar look to present the video (curated from HeyGen's public library).",
+                IO.DynamicCombo.Input(
+                    "engine",
+                    options=[
+                        IO.DynamicCombo.Option(
+                            "auto",
+                            [
+                                IO.Combo.Input(
+                                    "avatar",
+                                    options=HEYGEN_AVATAR_OPTIONS,
+                                    tooltip="Avatar look to present the video (curated from HeyGen's "
+                                    "public library). The best engine the look supports is chosen "
+                                    "automatically.",
+                                ),
+                            ],
+                        ),
+                        IO.DynamicCombo.Option(
+                            "avatar_iv",
+                            [
+                                IO.Combo.Input(
+                                    "avatar",
+                                    options=_AVATARS_BY_ENGINE["avatar_iv"],
+                                    tooltip="Avatar looks that support the Avatar IV engine.",
+                                ),
+                            ],
+                        ),
+                        IO.DynamicCombo.Option(
+                            "avatar_iii",
+                            [
+                                IO.Combo.Input(
+                                    "avatar",
+                                    options=_AVATARS_BY_ENGINE["avatar_iii"],
+                                    tooltip="Avatar looks that support the Avatar III engine.",
+                                ),
+                            ],
+                        ),
+                        IO.DynamicCombo.Option(
+                            "avatar_v",
+                            [
+                                IO.Combo.Input(
+                                    "avatar",
+                                    options=_AVATARS_BY_ENGINE["avatar_v"],
+                                    tooltip="Avatar looks that support the Avatar V engine.",
+                                ),
+                            ],
+                        ),
+                    ],
+                    tooltip="Rendering engine; each choice lists only the avatars that support it. "
+                    "'auto' offers every avatar and picks its best engine (Avatar IV preferred). "
+                    "Avatar V is highest fidelity, Avatar III is the most affordable.",
                 ),
                 IO.String.Input(
                     "custom_avatar_id",
@@ -316,19 +373,11 @@ class HeyGenAvatarVideoNode(IO.ComfyNode):
                     tooltip="Drive the avatar with a text script (HeyGen text-to-speech) or your own audio.",
                 ),
                 IO.Combo.Input(
-                    "engine",
-                    options=["auto", "avatar_iv", "avatar_iii", "avatar_v"],
-                    default="auto",
-                    optional=True,
-                    tooltip="Rendering engine. 'auto' picks the best engine the avatar supports "
-                    "(Avatar IV preferred). Avatar V is highest fidelity, Avatar III is the most affordable.",
-                ),
-                IO.Combo.Input(
                     "resolution",
                     options=["720p", "1080p", "4k"],
                     default="1080p",
                     optional=True,
-                    tooltip="Output video resolution. 4k requires the Avatar III engine.",
+                    tooltip="Output video resolution.",
                 ),
                 IO.Combo.Input(
                     "aspect_ratio",
@@ -378,16 +427,15 @@ class HeyGenAvatarVideoNode(IO.ComfyNode):
     @classmethod
     async def execute(
         cls,
-        avatar: str,
+        engine: dict,
         speech: dict,
         custom_avatar_id: str = "",
-        engine: str = "auto",
         resolution: str = "1080p",
         aspect_ratio: str = "auto",
         background_color: str = "",
         seed: int = 0,
     ) -> IO.NodeOutput:
-        avatar_id, engine_type = await _resolve_avatar(cls, avatar, custom_avatar_id, engine)
+        avatar_id, engine_type = await _resolve_avatar(cls, engine["avatar"], custom_avatar_id, engine["engine"])
         payload = {
             "type": "avatar",
             "avatar_id": avatar_id,

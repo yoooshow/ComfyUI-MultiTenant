@@ -188,7 +188,7 @@ class HeyGenTalkingPhotoNode(IO.ComfyNode):
                 ),
                 IO.Combo.Input(
                     "resolution",
-                    options=["720p", "1080p", "4k"],
+                    options=["720p", "1080p"],
                     default="1080p",
                     optional=True,
                     tooltip="Output video resolution.",
@@ -374,7 +374,7 @@ class HeyGenAvatarVideoNode(IO.ComfyNode):
                 ),
                 IO.Combo.Input(
                     "resolution",
-                    options=["720p", "1080p", "4k"],
+                    options=["720p", "1080p"],
                     default="1080p",
                     optional=True,
                     tooltip="Output video resolution.",

@@ -515,7 +515,8 @@ class PromptServer():
                     if hasattr(original_pil,'text'):
                         for key in original_pil.text:
                             metadata.add_text(key, original_pil.text[key])
-                    original_pil = original_pil.convert('RGBA')
+
+                    original_pil = ImageOps.exif_transpose(original_pil.convert('RGBA'))
                     original_pil.putalpha(Image.new('L', original_pil.size, 255))
                     mask_pil = Image.open(image.file).convert('RGBA')
 
@@ -527,7 +528,7 @@ class PromptServer():
 
                     masked_pil = original_pil.copy()
                     masked_pil.putalpha(new_alpha)
-                    masked_pil.save(filepath, compress_level=4, pnginfo=metadata)
+                    outputs = [(filepath, masked_pil, {"pnginfo": metadata})]
 
                     paint = post.get("paint")
                     if paint is not None and paint.file:
@@ -545,26 +546,28 @@ class PromptServer():
                             ("painted_filename", painted_pil, {"pnginfo": metadata}),
                             ("painted_masked_filename", painted_masked_pil, {"pnginfo": metadata}),
                         ]
-                        staged = []
-                        try:
-                            for field, pil_image, save_kwargs in sibling_outputs:
-                                name = post.get(field)
-                                if not name:
-                                    continue
-                                dest = os.path.join(save_dir, os.path.basename(name))
-                                tmp = f"{dest}.{uuid.uuid4().hex}.tmp"
-                                pil_image.save(tmp, format="PNG", compress_level=4, **save_kwargs)
-                                staged.append((tmp, dest))
-                            for tmp, dest in staged:
-                                os.replace(tmp, dest)
-                        except Exception:
-                            for tmp, _ in staged:
-                                if os.path.exists(tmp):
-                                    try:
-                                        os.remove(tmp)
-                                    except OSError:
-                                        pass
-                            raise
+                        for field, pil_image, save_kwargs in sibling_outputs:
+                            name = post.get(field)
+                            if not name:
+                                continue
+                            outputs.append((os.path.join(save_dir, os.path.basename(name)), pil_image, save_kwargs))
+
+                    staged = []
+                    try:
+                        for dest, pil_image, save_kwargs in outputs:
+                            tmp = f"{dest}.{uuid.uuid4().hex}.tmp"
+                            pil_image.save(tmp, format="PNG", compress_level=4, **save_kwargs)
+                            staged.append((tmp, dest))
+                        for tmp, dest in staged:
+                            os.replace(tmp, dest)
+                    except Exception:
+                        for tmp, _ in staged:
+                            if os.path.exists(tmp):
+                                try:
+                                    os.remove(tmp)
+                                except OSError:
+                                    pass
+                        raise
 
             # Compositing large originals can take seconds; keep it off the event loop
             return await asyncio.get_running_loop().run_in_executor(

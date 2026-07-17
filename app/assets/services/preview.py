@@ -20,7 +20,7 @@ def get_or_create_preview_file(
     source_abs_path: str, max_size: int, quality: int
 ) -> str:
     source_hash, source_ref_id = _ensure_source_asset(source_abs_path)
-    hash_hex = source_hash.partition(":")[2]
+    hash_hex = source_hash.split(":")[-1]
     preview_dir = folder_paths.get_system_user_directory("preview_cache")
     preview_path = os.path.join(
         preview_dir, f"{hash_hex}_{max_size}_q{quality}.webp"
@@ -32,10 +32,10 @@ def get_or_create_preview_file(
     tmp_path = f"{preview_path}.{uuid.uuid4().hex}.tmp"
     try:
         with Image.open(source_abs_path) as img:
-            preview_img = img
-            if max(img.size) > max_size:
+            preview_img = ImageOps.exif_transpose(img)
+            if max(preview_img.size) > max_size:
                 preview_img = ImageOps.contain(
-                    img, (max_size, max_size), Image.Resampling.LANCZOS
+                    preview_img, (max_size, max_size), Image.Resampling.LANCZOS
                 )
             preview_img.save(tmp_path, format="webp", quality=quality)
         os.replace(tmp_path, preview_path)

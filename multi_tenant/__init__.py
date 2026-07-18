@@ -21,11 +21,10 @@ def setup_routes_sync(server):
     This runs immediately (not in a background task), so routes and middleware
     are registered BEFORE the app runner starts.
     """
-    # Add API routes to the app directly (not to server.routes which is already registered)
     from aiohttp import web as aiohttp_web
     our_routes = aiohttp_web.RouteTableDef()
 
-    # Temporarily set our routes as server.routes so the decorators in setup_routes work
+    # Temporarily replace server.routes so decorators in setup_routes use our table
     original_routes = server.routes
     server.routes = our_routes
     try:
@@ -33,13 +32,10 @@ def setup_routes_sync(server):
     finally:
         server.routes = original_routes
 
-    # Register our route table with the app
+    # Register our API routes with the app
     server.app.add_routes(our_routes)
 
-    # Add frontend injection middleware
-    inject_frontend(server)
-
-    logger.info("Multi-tenant routes and middleware registered (sync)")
+    logger.info("Multi-tenant routes registered (sync)")
 
 
 async def setup(server):

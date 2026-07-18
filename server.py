@@ -1266,18 +1266,28 @@ class PromptServer():
                 web.static('/docs', embedded_docs_path)
             ])
 
+        # Initialize multi-tenant billing system (sync routes — runs immediately)
+        try:
+            from multi_tenant import setup_routes_sync
+            setup_routes_sync(self)
+            logging.info("Multi-tenant routes registered")
+        except ImportError as e:
+            logging.warning(f"Multi-tenant module not loaded: {e}")
+        except Exception as e:
+            logging.warning(f"Multi-tenant route setup error: {e}")
+
         self.app.add_routes([
             web.static('/', self.web_root),
         ])
 
-        # Initialize multi-tenant billing system
+        # Initialize multi-tenant async (DB, admin user, billing poller)
         try:
             from multi_tenant import setup as mt_setup
             self.loop.create_task(mt_setup(self))
         except ImportError as e:
-            logging.warning(f"Multi-tenant module not loaded: {e}")
+            logging.warning(f"Multi-tenant async module not loaded: {e}")
         except Exception as e:
-            logging.warning(f"Multi-tenant setup error: {e}")
+            logging.warning(f"Multi-tenant async setup error: {e}")
 
     def get_queue_info(self):
         prompt_info = {}

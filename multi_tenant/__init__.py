@@ -9,14 +9,42 @@ from aiohttp import web
 
 from .models import init_db, get_user, create_user, create_transaction, update_user_balance
 from .routes import setup_routes
+from .frontend import inject_frontend
 from .config import set_db_path, pending_bills
 
 logger = logging.getLogger(__name__)
 
 
+def setup_routes_sync(server):
+    """Synchronous route/middleware setup — called directly from add_routes().
+
+    This runs immediately (not in a background task), so routes and middleware
+    are registered BEFORE the app runner starts.
+    """
+    # Add API routes to the app directly (not to server.routes which is already registered)
+    from aiohttp import web as aiohttp_web
+    our_routes = aiohttp_web.RouteTableDef()
+
+    # Temporarily set our routes as server.routes so the decorators in setup_routes work
+    original_routes = server.routes
+    server.routes = our_routes
+    try:
+        setup_routes(server)
+    finally:
+        server.routes = original_routes
+
+    # Register our route table with the app
+    server.app.add_routes(our_routes)
+
+    # Add frontend injection middleware
+    inject_frontend(server)
+
+    logger.info("Multi-tenant routes and middleware registered (sync)")
+
+
 async def setup(server):
-    """Initialize multi-tenant system. Called from server.py after add_routes()."""
-    logger.info("Initializing Multi-Tenant billing system...")
+    """Initialize multi-tenant system. Called from server.py in a background task."""
+    logger.info("Initializing Multi-Tenant billing system (async)...")
 
     from folder_paths import get_user_directory
     user_dir = get_user_directory()
@@ -40,9 +68,6 @@ async def setup(server):
         logger.info("Default admin created: admin / admin123 (balance: 999999)")
     else:
         await update_user_balance(admin["id"], 999999)
-
-    # Add our API routes + frontend injection
-    setup_routes(server)
 
     # Wrap the prompt handler to add billing check
     _wrap_prompt_handler(server)

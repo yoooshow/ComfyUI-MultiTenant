@@ -128,7 +128,7 @@ def inject_frontend(server):
                     if idx > 0:
                         ts = f'<script>localStorage.setItem("mt_token","{token}")'
                         ts += ';if(location.search.includes("token="))'
-                        ts += f'history.replaceState({{}},"",location.pathname)<\/script>\n'
+                        ts += f'history.replaceState({{}},"",location.pathname)</script>\n'
                         html = html[:idx] + ts + html[idx:]
                     return web.Response(text=html, content_type="text/html")
 

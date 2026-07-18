@@ -109,8 +109,7 @@ def inject_frontend(server):
     from .auth import verify_token
 
     async def root_handler(request):
-        """Serve: login page if unauthenticated, or ComfyUI with lock scripts."""
-        # Check for valid auth token first
+        """Serve: login page, landing page, or ComfyUI workspace."""
         token = None
         auth = request.headers.get("Authorization", "")
         if auth.startswith("Bearer "):
@@ -119,37 +118,52 @@ def inject_frontend(server):
             token = request.query.get("token", "")
         if token:
             payload = verify_token(token)
-            # If token is valid, also store mt_token for JS to pick up
             if payload:
-                # Serve the regular index.html with lock scripts injected
-                idx_path = os.path.join(web_root, "index.html")
-                if not os.path.exists(idx_path):
-                    return web.HTTPNotFound()
-                try:
-                    with open(idx_path, "r", encoding="utf-8") as f:
-                        html = f.read()
-                    # Inject mt_token for the lock script to pick up + clean URL
-                    token_script = f'<script>localStorage.setItem("mt_token","{token}");if(location.search.includes("token="))history.replaceState({{}},"",location.pathname)</script>'
-                    lock_script = f'<script id="mt-lock">{_LOCK_JS}</script>'
-                    if "</head>" in html:
-                        html = html.replace("</head>", f"{token_script}\n</head>")
-                    if "</body>" in html:
-                        html = html.replace("</body>", f"{lock_script}\n</body>")
+                workflow = request.query.get("workflow", "")
+                if workflow:
+                    return await _serve_comfyui(request, token, payload, web_root)
+                else:
+                    html = _LANDING_PAGE
+                    idx = html.find("</head>")
+                    if idx > 0:
+                        ts = f'<script>localStorage.setItem("mt_token","{token}")'
+                        ts += ';if(location.search.includes("token="))'
+                        ts += f'history.replaceState({{}},"",location.pathname)<\/script>\n'
+                        html = html[:idx] + ts + html[idx:]
                     return web.Response(text=html, content_type="text/html")
-                except Exception as e:
-                    logger.error(f"Failed to serve index.html: {e}")
-                    return web.HTTPInternalServerError()
 
         # No valid token — serve login page
         html = _LOGIN_PAGE
-        # If there's a token in query param (e.g. from external redirect), pass it to JS
         if token:
-            # Token was provided but invalid - add error message
             html = html.replace(
                 '<div id="mt-err" class="error"></div>',
-                '<div id="mt-err" class="error" style="display:">登录已过期，请重新登录</div>',
+                '<div id="mt-err" class="error" style="display:">\u767b\u5f55\u5df2\u8fc7\u671f\uff0c\u8bf7\u91cd\u65b0\u767b\u5f55</div>',
             )
         return web.Response(text=html, content_type="text/html")
+
+    async def _serve_comfyui(request, token, payload, web_root):
+        """Serve ComfyUI index.html with lock/billing scripts injected."""
+        idx_path = os.path.join(web_root, "index.html")
+        if not os.path.exists(idx_path):
+            return web.HTTPNotFound()
+        try:
+            with open(idx_path, "r", encoding="utf-8") as f:
+                html = f.read()
+            token_script = (
+                f'<script>localStorage.setItem("mt_token","{token}");'
+                f'if(location.search.includes("token="))'
+                f'history.replaceState({{}},"",location.pathname)</script>'
+            )
+            lock_script = f'<script id="mt-lock">{_LOCK_JS}</script>'
+            if "</head>" in html:
+                html = html.replace("</head>", f"{token_script}\n</head>")
+            if "</body>" in html:
+                html = html.replace("</body>", f"{lock_script}\n</body>")
+            return web.Response(text=html, content_type="text/html")
+        except Exception as e:
+            logger.error(f"Failed to serve index.html: {e}")
+            return web.HTTPInternalServerError()
+
 
     # Register our handler for / and /index.html (takes priority over web.static)
     server.app.router.add_get("/", root_handler)
@@ -363,3 +377,125 @@ def inject_admin_route(server):
 
     server.app.router.add_get("/admin", admin_handler)
     logger.info("Admin panel registered at /admin")
+
+# ── Landing/Dashboard Page (shown after login, before entering ComfyUI) ──
+_LANDING_PAGE = """<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ComfyUI 多租户</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans SC",sans-serif;background:#f5f6fa;color:#1a1d23;min-height:100vh}
+.navbar{display:flex;align-items:center;gap:1rem;padding:0 2rem;height:56px;background:#1a1d23;color:#fff;position:sticky;top:0;z-index:100}
+.navbar .brand{font-weight:700;font-size:1.1rem;flex:1}
+.navbar .brand a{color:#fff;text-decoration:none}
+.navbar .user-info{display:flex;align-items:center;gap:.75rem;font-size:.9rem}
+.navbar .user-info .bal{background:rgba(79,110,247,.2);border:1px solid rgba(79,110,247,.35);border-radius:20px;padding:.25rem .7rem;font-size:.8rem;font-weight:600}
+.btn{display:inline-flex;align-items:center;gap:.4rem;padding:.45rem 1rem;border:none;border-radius:6px;font-size:.85rem;font-weight:500;cursor:pointer;white-space:nowrap;transition:all .15s}
+.btn-primary{background:#4f6ef7;color:#fff}
+.btn-primary:hover{background:#3d5bd9}
+.btn-outline{background:transparent;border:1px solid #d0d5dd;color:#1a1d23}
+.btn-outline:hover{background:#f0f2f5}
+.btn-sm{padding:.3rem .6rem;font-size:.8rem}
+.container{max-width:1100px;margin:0 auto;padding:2rem}
+.hero{background:linear-gradient(135deg,#1a1d23 0%,#25262b 100%);border-radius:12px;padding:2.5rem;margin-bottom:2rem;color:#fff;display:flex;align-items:center;justify-content:space-between}
+.hero h1{font-size:1.8rem;font-weight:700;letter-spacing:-.02em}
+.hero h1 span{opacity:.5;font-weight:400}
+.hero p{color:#98a2b3;font-size:.9rem;margin-top:.5rem}
+.hero-cta{text-align:right}
+.hero-cta .big-num{font-size:2.5rem;font-weight:800;color:#4f6ef7;display:block;line-height:1}
+.hero-cta .big-lbl{font-size:.85rem;color:#98a2b3}
+h2{font-size:1.1rem;font-weight:600;margin-bottom:1rem;color:#344054}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem;margin-bottom:2rem}
+.card{background:#fff;border:1px solid #e2e5ea;border-radius:10px;padding:1.25rem 1.5rem;cursor:pointer;transition:all .2s;position:relative;overflow:hidden}
+.card:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,.08);border-color:#c0c4cc}
+.card .name{font-size:1rem;font-weight:600;margin-bottom:.25rem}
+.card .desc{font-size:.85rem;color:#667085;margin-bottom:.75rem;line-height:1.4}
+.card .meta{font-size:.78rem;color:#98a2b3}
+.card .action{text-align:right;margin-top:.75rem}
+.cost-badge{display:inline-block;padding:.15rem .55rem;background:rgba(79,110,247,.1);border-radius:12px;font-size:.78rem;font-weight:600;color:#4f6ef7}
+.empty{text-align:center;color:#98a2b3;padding:3rem}
+.section{background:#fff;border:1px solid #e2e5ea;border-radius:10px;padding:1.25rem 1.5rem;margin-bottom:1.5rem}
+.section-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem}
+.section-hdr h2{margin-bottom:0}
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+th,td{padding:.5rem .75rem;text-align:left;border-bottom:1px solid #e2e5ea}
+th{font-weight:600;color:#667085;font-size:.78rem;text-transform:uppercase}
+.badge{display:inline-block;padding:.12rem .45rem;border-radius:20px;font-size:.75rem;font-weight:500}
+.badge-completed{background:#d1fae5;color:#065f46}
+.badge-running{background:#dbeafe;color:#1d4ed8}
+.badge-queued{background:#fef3c7;color:#b45309}
+.badge-failed{background:#fee2e2;color:#991b1b}
+.toast-fixed{position:fixed;top:1rem;right:1rem;z-index:300;padding:.75rem 1.25rem;border-radius:8px;color:#fff;font-size:.9rem;box-shadow:0 4px 12px rgba(0,0,0,.15)}
+@media(max-width:640px){.hero{flex-direction:column;text-align:center;gap:1rem}.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="navbar">
+  <div class="brand"><a href="/">ComfyUI <span style="font-weight:400;opacity:.5">多租户</span></a></div>
+  <div class="user-info">
+    <span class="bal" id="nav-bal">通证: ---</span>
+    <span id="nav-user"></span>
+    <a id="nav-admin" href="/admin" class="btn btn-sm btn-outline" style="display:none">管理后台</a>
+    <button class="btn-text" style="background:transparent;color:rgba(255,255,255,.7);border:none;cursor:pointer;padding:.3rem .6rem" onclick="localStorage.removeItem('mt_token');location.href='/'">退出</button>
+  </div>
+</div>
+<div class="container">
+  <div id="content">加载中...</div>
+</div>
+<script>
+var T=localStorage.getItem('mt_token');
+function api(m,p,b){return fetch(location.origin+p,{method:m||'GET',headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},body:b?JSON.stringify(b):null})}
+function toast(msg,t){var d=document.createElement('div');d.className='toast-fixed';d.style.background=t==='error'?'#ef4444':'#10b981';d.textContent=msg;document.body.appendChild(d);setTimeout(function(){d.remove()},3000)}
+
+(function(){
+  if(!T){location.href='/';return}
+  // Load user info + balance
+  var user,bal,workflows,jobs;
+  Promise.all([
+    api('GET','/api/auth/me').then(function(u){user=u;document.getElementById('nav-user').textContent=u.display_name||u.username;if(u.is_admin)document.getElementById('nav-admin').style.display=''}),
+    api('GET','/api/users/me/balance').then(function(d){bal=d.token_balance;document.getElementById('nav-bal').textContent='\\u901a\\u8bc1: '+bal.toLocaleString()}),
+    api('GET','/api/jobs/workflows').then(function(w){workflows=w||[]}),
+    api('GET','/api/jobs/?page=1&page_size=10').then(function(d){jobs=(d.items||[]).slice(0,5)})
+  ]).then(function(){
+    var el=document.getElementById('content');
+    var myBal=bal||0;
+    var minCost=10;
+
+    // Hero section (like liblib's "开始生图 N" style)
+    var hero='<div class="hero"><div><h1>ComfyUI <span>工作台</span></h1><p>选择一个工作流开始生图</p></div><div class="hero-cta"><span class="big-num">'+myBal.toLocaleString()+'</span><span class="big-lbl">\\u5269\\u4f59 \\u901a\\u8bc1</span></div></div>';
+
+    // Workflow cards
+    var wfCards=workflows.length?workflows.map(function(w,i){
+      var bg=['#eef2ff','#f0fdf4','#fff7ed','#fdf2f8','#f0f9ff'][i%5];
+      var est=w.base_cost+20*w.cost_per_step;
+      return '<div class="card" style="background:'+bg+'" onclick="location.href=\'/?workflow='+encodeURIComponent(w.name)+'&token='+encodeURIComponent(T)+'\\'"><div class="name">'+w.display_name+'</div><div class="desc">'+ (w.description||w.name) +'</div><div class="meta"><span class="cost-badge">\\u2248'+est+' \\u901a\\u8bc1</span></div><div class="action"><span class="btn btn-primary btn-sm">\\u5f00\\u59cb\\u751f\\u56fe \\u2192</span></div></div>';
+    }).join(''):'<div class="empty">暂无可用的工作流模板，请联系管理员创建</div>';
+    var wfSection='<h2>\\u5de5\\u4f5c\\u6d41\\u6a21\\u677f</h2><div class="grid">'+wfCards+'</div>';
+
+    // Recent jobs
+    var jobRows=jobs.length?jobs.map(function(j){
+      var s={'queued':'排队中','running':'\\u8fd0\\u884c\\u4e2d','completed':'\\u5df2\\u5b8c\\u6210','failed':'\\u5931\\u8d25'};
+      return '<tr><td>#'+j.id+'</td><td>'+j.workflow_name+'</td><td>'+j.token_cost+'</td><td><span class="badge badge-'+j.status+'">'+(s[j.status]||j.status)+'</span></td><td>'+new Date(j.created_at).toLocaleString()+'</td></tr>';
+    }).join(''):'<tr><td colspan="5"><div class="empty">暂无任务</div></td></tr>';
+    var jobSection='<div class="section"><div class="section-hdr"><h2>\\u6700\\u8fd1\\u4efb\\u52a1</h2><a href="/jobs" class="btn btn-outline btn-sm">\\u67e5\\u770b\\u5168\\u90e8</a></div><table><thead><tr><th>ID</th><th>\\u5de5\\u4f5c\\u6d41</th><th>\\u6d88\\u8017</th><th>\\u72b6\\u6001</th><th>\\u65f6\\u95f4</th></tr></thead><tbody>'+jobRows+'</tbody></table></div>';
+
+    el.innerHTML=hero+wfSection+jobSection;
+  }).catch(function(e){document.getElementById('content').innerHTML='<div class="empty">\\u52a0\\u8f7d\\u5931\\u8d25: '+e.message+'</div>'});
+})();
+</script>
+</body>
+</html>"""
+
+
+def inject_landing_page(server):
+    """Modify root_handler to serve landing page when authenticated."""
+    from .auth import verify_token
+
+    # We need to modify the existing root_handler. Since we already registered it,
+    # let's override it by registering a new handler with higher priority.
+    # Actually, since we control the root_handler in inject_frontend, let's
+    # just update the inject_frontend function to include this logic.
+    # For now, this function is called from inject_frontend to add the landing page.
+    pass

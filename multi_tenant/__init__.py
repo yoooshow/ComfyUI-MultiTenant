@@ -47,7 +47,7 @@ def setup_routes_sync(server):
         logger.info("Default admin created: admin / admin123 (balance: 999999)")
     else:
         import sqlite3
-    # Reset admin balance to max
+        # Reset admin balance to max
         conn = sqlite3.connect(db_path)
         conn.execute("UPDATE users SET token_balance = 999999 WHERE id = ?", (admin["id"],))
         conn.commit()

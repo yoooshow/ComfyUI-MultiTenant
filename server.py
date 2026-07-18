@@ -1226,6 +1226,16 @@ class PromptServer():
             # routes to add /api prefix.
             if isinstance(route, web.RouteDef):
                 api_routes.route(route.method, "/api" + route.path)(route.handler, **route.kwargs)
+        # Initialize multi-tenant routes (must register BEFORE existing @routes.get("/"))
+        try:
+            from multi_tenant import setup_routes_sync
+            setup_routes_sync(self)
+            logging.info("Multi-tenant routes registered (early)")
+        except ImportError as e:
+            logging.warning(f"Multi-tenant module not loaded: {e}")
+        except Exception as e:
+            logging.warning(f"Multi-tenant route setup error: {e}")
+
         self.app.add_routes(api_routes)
         self.app.add_routes(self.routes)
 
@@ -1266,15 +1276,6 @@ class PromptServer():
                 web.static('/docs', embedded_docs_path)
             ])
 
-        # Initialize multi-tenant billing system (sync routes — runs immediately)
-        try:
-            from multi_tenant import setup_routes_sync
-            setup_routes_sync(self)
-            logging.info("Multi-tenant routes registered")
-        except ImportError as e:
-            logging.warning(f"Multi-tenant module not loaded: {e}")
-        except Exception as e:
-            logging.warning(f"Multi-tenant route setup error: {e}")
 
         self.app.add_routes([
             web.static('/', self.web_root),

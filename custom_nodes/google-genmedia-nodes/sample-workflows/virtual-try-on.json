@@ -1,0 +1,428 @@
+{
+  "id": "17f0d127-0d4d-4da0-8327-a65598eac49a",
+  "revision": 0,
+  "last_node_id": 24,
+  "last_link_id": 32,
+  "nodes": [
+    {
+      "id": 14,
+      "type": "PreviewImage",
+      "pos": [
+        -276.5516662597656,
+        389.6317443847656
+      ],
+      "size": [
+        551.8596801757812,
+        421.3843078613281
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 9
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.45",
+        "Node name for S&R": "PreviewImage"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 21,
+      "type": "PreviewImage",
+      "pos": [
+        321.5346374511719,
+        389.5382995605469
+      ],
+      "size": [
+        498.7326354980469,
+        409.5345764160156
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 23
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.45",
+        "Node name for S&R": "PreviewImage"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 13,
+      "type": "PreviewImage",
+      "pos": [
+        1217.2789306640625,
+        -318.6766052246094
+      ],
+      "size": [
+        921.646728515625,
+        412.34954833984375
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 27
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.45",
+        "Node name for S&R": "PreviewImage"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 17,
+      "type": "VHS_LoadImagesPath",
+      "pos": [
+        324.8298034667969,
+        -202.73291015625
+      ],
+      "size": [
+        246.3153533935547,
+        520.6581420898438
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "meta_batch",
+          "shape": 7,
+          "type": "VHS_BatchManager",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            23,
+            30
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        },
+        {
+          "name": "frame_count",
+          "type": "INT",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-videohelpersuite",
+        "ver": "8e4d79471bf1952154768e8435a9300077b534fa",
+        "Node name for S&R": "VHS_LoadImagesPath"
+      },
+      "widgets_values": {
+        "directory": "input/virtual-try-on/",
+        "image_load_cap": 0,
+        "skip_first_images": 0,
+        "select_every_nth": 1,
+        "videopreview": {
+          "hidden": false,
+          "paused": true,
+          "params": {
+            "image_load_cap": 0,
+            "skip_first_images": 0,
+            "select_every_nth": 1,
+            "filename": "input/virtual-try-on/",
+            "type": "path",
+            "format": "folder"
+          }
+        }
+      }
+    },
+    {
+      "id": 23,
+      "type": "VirtualTryOn",
+      "pos": [
+        640.9481811523438,
+        -231.8859405517578
+      ],
+      "size": [
+        444.24261474609375,
+        296.9232482910156
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "person_image",
+          "type": "IMAGE",
+          "link": 29
+        },
+        {
+          "name": "product_image",
+          "type": "IMAGE",
+          "link": 30
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Generated Image",
+          "type": "IMAGE",
+          "links": [
+            27,
+            31
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VirtualTryOn"
+      },
+      "widgets_values": [
+        32,
+        "ALLOW_ADULT",
+        1,
+        1083011979,
+        "randomize",
+        false,
+        "BLOCK_MEDIUM_AND_ABOVE",
+        "",
+        ""
+      ]
+    },
+    {
+      "id": 22,
+      "type": "VeoVideoSaveAndPreview",
+      "pos": [
+        1700.021240234375,
+        181.5886993408203
+      ],
+      "size": [
+        643.5447387695312,
+        558.743896484375
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video_paths",
+          "type": "VEO_VIDEO",
+          "link": 32
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "VeoVideoSaveAndPreview"
+      },
+      "widgets_values": [
+        true,
+        true,
+        true,
+        true,
+        "veo_video",
+        {
+          "hidden": false,
+          "paused": false,
+          "parameters": {}
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "Imagen4TextToImageNode",
+      "pos": [
+        -328.51904296875,
+        -280.6464538574219
+      ],
+      "size": [
+        587.5960693359375,
+        511.94781494140625
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "Generated Image",
+          "type": "IMAGE",
+          "links": [
+            9,
+            29
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Imagen4TextToImageNode"
+      },
+      "widgets_values": [
+        "IMAGEN_4",
+        "A full-length, photorealistic, high-fashion shot of a professional model walking with a powerful and elegant stride down a modern, minimalist runway. The model is illuminated by a single, sharp spotlight that creates a dramatic and focused circle of light around her, making her and the dress the undeniable center of attention. The background is a seamless, deep, non-reflective black, which makes the white dress pop.\n\nThe model is wearing a stunning, floor-length, couture white dress made of a flowing, slightly iridescent silk charmeuse. The dress should have a simple yet elegant silhouette, perhaps with a high slit to allow for movement and to showcase the drape of the fabric. The spotlight should highlight the subtle sheen of the silk, the delicate texture of the fabric, and the way it moves with her body.\n\nThe model's expression is confident and serene, with a neutral yet captivating gaze directed forward. Her hair is styled in a sleek, pulled-back chignon to keep the focus on the dress and her face.\n\nThe overall image should have the clean, crisp, and luxurious feel of a high-end fashion magazine editorial, with tack-sharp focus on the model and the dress, and every detail rendered with pristine clarity. The lighting should be the hero, sculpting the model's form and revealing the intricate details of the white dress.",
+        "allow_adult",
+        "16:9",
+        1,
+        "",
+        309454805,
+        "randomize",
+        true,
+        false,
+        "PNG",
+        "BLOCK_MEDIUM_AND_ABOVE",
+        "",
+        ""
+      ]
+    },
+    {
+      "id": 24,
+      "type": "Veo3ImageToVideoNode",
+      "pos": [
+        991.64013671875,
+        184.5477752685547
+      ],
+      "size": [
+        558.5807495117188,
+        565.22021484375
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 31
+        },
+        {
+          "name": "last_frame",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "video_paths",
+          "type": "VEO_VIDEO",
+          "links": [
+            32
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Veo3ImageToVideoNode"
+      },
+      "widgets_values": [
+        "VEO_3_1",
+        "PNG",
+        "make the models do ramp walk with upbeat music in the background",
+        "16:9",
+        "720p",
+        "optimized",
+        "allow_adult",
+        8,
+        true,
+        1,
+        "",
+        "",
+        3087774325,
+        "randomize",
+        "",
+        ""
+      ]
+    }
+  ],
+  "links": [
+    [
+      9,
+      12,
+      0,
+      14,
+      0,
+      "IMAGE"
+    ],
+    [
+      23,
+      17,
+      0,
+      21,
+      0,
+      "IMAGE"
+    ],
+    [
+      27,
+      23,
+      0,
+      13,
+      0,
+      "IMAGE"
+    ],
+    [
+      29,
+      12,
+      0,
+      23,
+      0,
+      "IMAGE"
+    ],
+    [
+      30,
+      17,
+      0,
+      23,
+      1,
+      "IMAGE"
+    ],
+    [
+      31,
+      23,
+      0,
+      24,
+      0,
+      "IMAGE"
+    ],
+    [
+      32,
+      24,
+      0,
+      22,
+      0,
+      "VEO_VIDEO"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.7150000000000016,
+      "offset": [
+        337.61186458175035,
+        379.9539579696024
+      ]
+    },
+    "frontendVersion": "1.26.13",
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
+  },
+  "version": 0.4
+}

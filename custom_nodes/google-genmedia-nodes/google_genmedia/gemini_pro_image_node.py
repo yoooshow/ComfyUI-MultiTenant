@@ -1,0 +1,316 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# This is a preview version of Gemini 3 Pro Image custom node
+
+from typing import Any, Dict, List, Optional, Tuple
+
+import numpy as np
+import torch
+
+from .constants import (
+    GEMINI_3_PRO_IMAGE_ASPECT_RATIO,
+    GeminiProImageModel,
+    ThresholdOptions,
+)
+from .custom_exceptions import APIExecutionError, APIInputError, ConfigurationError
+from .gemini_pro_image_api import GeminiProImageAPI
+
+
+class Gemini3ProImage:
+    """
+    A ComfyUI node for generating images from text prompts using the Google Gemini Pro Image API.
+    """
+
+    def __init__(self) -> None:
+        """
+        Initializes the Gemini3ProImage Node.
+        """
+        pass
+
+    @classmethod
+    def INPUT_TYPES(cls) -> Dict[str, Dict[str, Any]]:
+        """
+        Defines the input types and widgets for the ComfyUI node.
+
+        Returns:
+            A dictionary specifying the required and optional input parameters.
+        """
+        return {
+            "required": {
+                "model": (
+                    "STRING",
+                    {"default": "gemini-3-pro-image-preview",
+                     "tooltip": "Model name, e.g. gemini-3-pro-image-preview"},
+                ),
+                "prompt": (
+                    "STRING",
+                    {
+                        "multiline": True,
+                        "default": "A vivid landscape painting of a futuristic city",
+                    },
+                ),
+                "aspect_ratio": (
+                    [
+                        "auto",
+                        "1:1",
+                        "2:3",
+                        "3:2",
+                        "3:4",
+                        "4:3",
+                        "4:5",
+                        "5:4",
+                        "9:16",
+                        "16:9",
+                        "21:9",
+                    ],
+                    {"default": "16:9"},
+                ),
+                "image_size": (
+                    [
+                        "1K",
+                        "2K",
+                        "4K",
+                    ],
+                    {"default": "1K"},
+                ),
+                "output_mime_type": (
+                    [
+                        "PNG",
+                        "JPEG",
+                    ],
+                    {"default": "PNG"},
+                ),
+                "temperature": (
+                    "FLOAT",
+                    {"default": 0.7, "min": 0.0, "max": 1.0, "step": 0.01},
+                ),
+                "top_p": (
+                    "FLOAT",
+                    {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01},
+                ),
+                "top_k": ("INT", {"default": 32, "min": 1, "max": 64}),
+            },
+            "optional": {
+                "image1": ("IMAGE",),
+                "image2": ("IMAGE",),
+                "image3": ("IMAGE",),
+                "image4": ("IMAGE",),
+                "image5": ("IMAGE",),
+                "image6": ("IMAGE",),
+                "image7": ("IMAGE",),
+                "image8": ("IMAGE",),
+                "image9": ("IMAGE",),
+                "image10": ("IMAGE",),
+                "image11": ("IMAGE",),
+                "image12": ("IMAGE",),
+                "image13": ("IMAGE",),
+                "image14": ("IMAGE",),
+                # Safety Settings
+                "harassment_threshold": (
+                    [threshold_option.name for threshold_option in ThresholdOptions],
+                    {"default": ThresholdOptions.BLOCK_MEDIUM_AND_ABOVE.name},
+                ),
+                "hate_speech_threshold": (
+                    [threshold_option.name for threshold_option in ThresholdOptions],
+                    {"default": ThresholdOptions.BLOCK_MEDIUM_AND_ABOVE.name},
+                ),
+                "sexually_explicit_threshold": (
+                    [threshold_option.name for threshold_option in ThresholdOptions],
+                    {"default": ThresholdOptions.BLOCK_MEDIUM_AND_ABOVE.name},
+                ),
+                "dangerous_content_threshold": (
+                    [threshold_option.name for threshold_option in ThresholdOptions],
+                    {"default": ThresholdOptions.BLOCK_MEDIUM_AND_ABOVE.name},
+                ),
+                "debug": (
+                    "BOOLEAN",
+                    {"default": False,
+                     "tooltip": "Enable debug output to view request/response details"},
+                ),
+                "system_instruction": (
+                    "STRING",
+                    {
+                        "multiline": True,
+                        "default": "",
+                        "placeholder": "Optional system instruction for the model",
+                    },
+                ),
+            },
+        }
+
+    RETURN_TYPES = ("IMAGE", "STRING")
+    RETURN_NAMES = ("Generated Image", "Debug Info")
+
+    FUNCTION = "generate_and_return_image"
+    CATEGORY = "Google AI/GeminiProImage"
+
+    def generate_and_return_image(
+        self,
+        model: str,
+        aspect_ratio: str,
+        image_size: str,
+        output_mime_type: str,
+        prompt: str,
+        temperature: float,
+        top_p: float,
+        top_k: int,
+        hate_speech_threshold: str,
+        harassment_threshold: str,
+        sexually_explicit_threshold: str,
+        dangerous_content_threshold: str,
+        system_instruction: str,
+        image1: Optional[torch.Tensor] = None,
+        image2: Optional[torch.Tensor] = None,
+        image3: Optional[torch.Tensor] = None,
+        image4: Optional[torch.Tensor] = None,
+        image5: Optional[torch.Tensor] = None,
+        image6: Optional[torch.Tensor] = None,
+        image7: Optional[torch.Tensor] = None,
+        image8: Optional[torch.Tensor] = None,
+        image9: Optional[torch.Tensor] = None,
+        image10: Optional[torch.Tensor] = None,
+        image11: Optional[torch.Tensor] = None,
+        image12: Optional[torch.Tensor] = None,
+        image13: Optional[torch.Tensor] = None,
+        image14: Optional[torch.Tensor] = None,
+        debug: bool = False,
+    ) -> Tuple[torch.Tensor,]:
+        """Generates images using the Gemini Pro Image API and returns them.
+
+        This method interfaces with the GeminiProImageAPI to generate images
+        based on a prompt and other parameters. It then converts the generated
+        PIL images into a PyTorch tensor suitable for use in ComfyUI.
+
+        Args:
+            model: The Gemini Pro Image model to use. default: gemini-3-pro-image
+            aspect_ratio: The desired aspect ratio of the output image.
+            image_size: The desired image size for the output image.
+            output_mime_type: The desired format for the output image.
+            prompt: The text prompt for image generation.
+            temperature: Controls randomness in token generation.
+            top_p: The cumulative probability of tokens to consider for sampling.
+            top_k: The number of highest probability tokens to consider for sampling.
+            hate_speech_threshold: Safety threshold for hate speech.
+            harassment_threshold: Safety threshold for harassment.
+            sexually_explicit_threshold: Safety threshold for sexually explicit
+              content.
+            dangerous_content_threshold: Safety threshold for dangerous content.
+            system_instruction: System-level instructions for the model.
+            image1: The primary input image tensor for image editing tasks.
+            image2: An optional second input image tensor. Defaults to None.
+            image3: An optional third input image tensor. Defaults to None.
+            image4: An optional fourth input image tensor. Defaults to None.
+            image5: An optional fifth input image tensor. Defaults to None.
+            image6: An optional sixth input image tensor. Defaults to None.
+            gcp_project_id: The GCP project ID.
+            gcp_region: The GCP region.
+
+        Returns:
+            A tuple containing a PyTorch tensor of the generated images,
+            formatted as (batch_size, height, width, channels).
+
+        Raises:
+            RuntimeError: If API configuration fails, or if image generation encounters an API error.
+        """
+        try:
+            gemini_pro_image_api = GeminiProImageAPI(
+                api_key=api_key, base_url=base_url
+            )
+        except ConfigurationError as e:
+            raise RuntimeError(
+                f"Gemini Pro Image API Configuration Error: {e}"
+            ) from e
+
+        output_mime_type = "image/" + output_mime_type.lower()
+
+        if aspect_ratio != "auto" and aspect_ratio not in GEMINI_3_PRO_IMAGE_ASPECT_RATIO:
+            raise RuntimeError(
+                f"Invalid aspect ratio: {aspect_ratio}. Valid aspect ratios are: {GEMINI_3_PRO_IMAGE_ASPECT_RATIO}."
+            )
+
+        try:
+            pil_images = gemini_pro_image_api.generate_image(
+                model=model,
+                aspect_ratio=aspect_ratio,
+                image_size=image_size,
+                output_mime_type=output_mime_type,
+                prompt=prompt,
+                temperature=temperature,
+                top_p=top_p,
+                top_k=top_k,
+                hate_speech_threshold=hate_speech_threshold,
+                harassment_threshold=harassment_threshold,
+                sexually_explicit_threshold=sexually_explicit_threshold,
+                dangerous_content_threshold=dangerous_content_threshold,
+                system_instruction=system_instruction,
+                image1=image1,
+                image2=image2,
+                image3=image3,
+                image4=image4,
+                image5=image5,
+                image6=image6,
+                image7=image7,
+                image8=image8,
+                image9=image9,
+                image10=image10,
+                image11=image11,
+                image12=image12,
+                image13=image13,
+                image14=image14,
+                debug=debug,
+            )
+        except APIInputError as e:
+            raise RuntimeError(f"Image generation input error: {e}") from e
+        except APIExecutionError as e:
+            raise RuntimeError(f"Image generation API error: {e}") from e
+        except Exception as e:
+            raise RuntimeError(
+                f"An unexpected error occurred during image generation: {e}"
+            ) from e
+
+        if not pil_images:
+            raise RuntimeError(
+                "Imagen API failed to generate images or generated no valid images."
+            )
+
+        output_tensors: List[torch.Tensor] = []
+        for img in pil_images:
+            img = img.convert("RGB")
+            img_np = np.array(img).astype(np.float32) / 255.0
+            img_tensor = torch.from_numpy(img_np)[None,]
+            output_tensors.append(img_tensor)
+
+        batched_images_tensor = torch.cat(output_tensors, dim=0)
+        debug_info = ""
+        if debug:
+            # Write debug log to file
+            import os
+            from datetime import datetime
+            log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+            os.makedirs(log_dir, exist_ok=True)
+            log_path = os.path.join(log_dir, f"gemini_debug_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+            with open(log_path, "w", encoding="utf-8") as lf:
+                lf.write("=== Gemini API Debug Log ===\n")
+                lf.write(f"Time: {datetime.now().isoformat()}\n")
+                lf.write(f"Node: gemini_pro_image\n\n")
+                lf.write(gemini_pro_image_api.last_debug_info)
+                lf.write("\n\n=== End ===\n")
+            debug_info = gemini_pro_image_api.last_debug_info + f"\n\nLog saved to: {log_path}"
+        return (batched_images_tensor, debug_info)
+
+
+NODE_CLASS_MAPPINGS = {"Gemini3ProImage": Gemini3ProImage}
+
+NODE_DISPLAY_NAME_MAPPINGS = {"Gemini3ProImage": "Gemini 3 Pro Image (🍌)"}

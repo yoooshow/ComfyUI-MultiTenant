@@ -1,0 +1,113 @@
+{
+  "id": "84b5eff9-dee6-47b8-9bf8-83a4b4ec04f9",
+  "revision": 0,
+  "last_node_id": 9,
+  "last_link_id": 8,
+  "nodes": [
+    {
+      "id": 9,
+      "type": "VeoVideoSaveAndPreview",
+      "pos": [
+        1817.1077867437702,
+        258.77555994420294
+      ],
+      "size": [
+        282.740234375,
+        154
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video_paths",
+          "type": "VEO_VIDEO",
+          "link": 8
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "VeoVideoSaveAndPreview"
+      },
+      "widgets_values": [
+        true,
+        true,
+        true,
+        true,
+        "veo_video"
+      ]
+    },
+    {
+      "id": 7,
+      "type": "Veo3TextToVideoNode",
+      "pos": [
+        990.219970703125,
+        174.81886291503906
+      ],
+      "size": [
+        570.1547241210938,
+        577.1671142578125
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "video_paths",
+          "type": "VEO_VIDEO",
+          "links": [
+            8
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Veo3TextToVideoNode"
+      },
+      "widgets_values": [
+        "VEO_3_1",
+        "A drone shot smoothly flies through an ancient, mist-shrouded jungle at dawn. As it progresses, the mist slowly dissipates, revealing colossal, glowing crystal formations emerging from the ground. Fauna, never-before-seen, begins to stir – iridescent birds with long tails take flight, and massive, gentle creatures with bioluminescent markings graze among the crystals. The light subtly shifts from dawn's muted tones to vibrant daylight, illuminating new details with each passing second. The camera eventually ascends above the canopy, revealing a breathtaking vista of the entire crystal forest.",
+        "16:9",
+        "720p",
+        "optimized",
+        "allow_adult",
+        8,
+        true,
+        1,
+        "",
+        "",
+        0,
+        "randomize",
+        "",
+        ""
+      ]
+    }
+  ],
+  "links": [
+    [
+      8,
+      7,
+      0,
+      9,
+      0,
+      "VEO_VIDEO"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 1.0468315000000026,
+      "offset": [
+        -730.0663490816468,
+        -77.64489923137613
+      ]
+    },
+    "frontendVersion": "1.28.7",
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
+  },
+  "version": 0.4
+}

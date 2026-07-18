@@ -1,0 +1,229 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# This is a preview version of Gemini 2.5 Flash Image custom node
+
+import os
+from datetime import datetime
+from io import BytesIO
+from typing import List, Optional
+
+import torch
+from google import genai
+from google.api_core import exceptions as api_core_exceptions
+from google.genai import types
+from PIL import Image
+
+from . import utils
+from .base import VertexAIClient
+from .constants import (
+    GEMINI_25_FLASH_IMAGE_MAX_OUTPUT_TOKEN,
+    GEMINI_25_FLASH_IMAGE_USER_AGENT,
+    GeminiFlashImageModel,
+)
+from .custom_exceptions import ConfigurationError
+from .logger import get_node_logger
+from .retry import api_error_retry
+
+logger = get_node_logger(__name__)
+
+class GeminiFlashImageAPI(VertexAIClient):
+    """
+    A class to interact with the Gemini Flash Image Preview model.
+    """
+
+    def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
+        """Initializes the Gemini 2.5 Flash Image Preview client.
+        Args:
+            project_id (Optional[str], optional): The GCP project ID. If not provided, it will be inferred from the environment. Defaults to None.
+            region (Optional[str], optional): The GCP region. If not provided, it will be inferred from the environment. Defaults to None.
+        Raises:
+            ConfigurationError: If GCP Project or region cannot be determined or client initialization fails.
+        """
+        super().__init__(
+            api_key=api_key, base_url=base_url,
+            user_agent=GEMINI_25_FLASH_IMAGE_USER_AGENT,
+        )
+        self.last_debug_info = ""
+
+    @api_error_retry
+    def generate_image(
+        self,
+        model: str,
+        aspect_ratio: str,
+        prompt: str,
+        temperature: float,
+        top_p: float,
+        top_k: int,
+        hate_speech_threshold: str,
+        harassment_threshold: str,
+        sexually_explicit_threshold: str,
+        dangerous_content_threshold: str,
+        system_instruction: str,
+        image1: Optional[torch.Tensor] = None,
+        image2: Optional[torch.Tensor] = None,
+        image3: Optional[torch.Tensor] = None,
+        image4: Optional[torch.Tensor] = None,
+        image5: Optional[torch.Tensor] = None,
+        image6: Optional[torch.Tensor] = None,
+        image7: Optional[torch.Tensor] = None,
+        image8: Optional[torch.Tensor] = None,
+        image9: Optional[torch.Tensor] = None,
+        image10: Optional[torch.Tensor] = None,
+        image11: Optional[torch.Tensor] = None,
+        image12: Optional[torch.Tensor] = None,
+        image13: Optional[torch.Tensor] = None,
+        image14: Optional[torch.Tensor] = None,
+        image_size: Optional[str] = None,
+        output_mime_type: Optional[str] = None,
+        debug: bool = False,
+    ) -> List[Image.Image]:
+        """Generates an image using the Gemini Flash Image model.
+
+        Args:
+            model: The name of the Gemini model to use.
+            aspect_ratio: The desired aspect ratio of the output image.
+            prompt: The text prompt for image generation.
+            temperature: Controls randomness in token generation.
+            top_p: The cumulative probability of tokens to consider for sampling.
+            top_k: The number of highest probability tokens to consider for sampling.
+            hate_speech_threshold: Safety threshold for hate speech.
+            harassment_threshold: Safety threshold for harassment.
+            sexually_explicit_threshold: Safety threshold for sexually explicit
+              content.
+            dangerous_content_threshold: Safety threshold for dangerous content.
+            system_instruction: System-level instructions for the model.
+            image1: An optional primary input image tensor for image-to-image tasks.
+            image2: An optional second input image tensor. Defaults to None.
+            image3: An optional third input image tensor. Defaults to None.
+            image4: An optional fourth input image tensor. Defaults to None.
+            image5: An optional fifth input image tensor. Defaults to None.
+            image6: An optional sixth input image tensor. Defaults to None.
+            image_size: The desired image size for the output image.
+            output_mime_type: The desired format for the output image.
+
+        Returns:
+            A list of generated PIL images.
+
+        Raises:
+            APIInputError: If input parameters are invalid.
+            APIExecutionError: If the API call fails due to quota, permissions, or server issues.
+        """
+        # Allow custom model names (e.g. from relay endpoints)
+        if model not in GeminiFlashImageModel.__members__:
+            logger.info(f"Using custom model name: {model}")
+        else:
+            model = GeminiFlashImageModel[model]
+
+        generated_pil_images: List[Image.Image] = []
+
+        # Build request debug info
+        if debug:
+            dbg = []
+            dbg.append(f"Model: {model}")
+            dbg.append(f"Prompt: {prompt[:200]}")
+            dbg.append(f"Aspect Ratio: {aspect_ratio}")
+            dbg.append(f"Image Size: {image_size or 'default'}")
+            for idx, img_t in enumerate([image1, image2, image3, image4, image5, image6, image7, image8, image9, image10, image11, image12, image13, image14]):
+                if img_t is not None:
+                    dbg.append(f"Input Image {idx+1}: {img_t.shape[2]}x{img_t.shape[1]}, frames={img_t.shape[0]}")
+            dbg.append("--- Request Sent ---")
+            self.last_debug_info = "\n".join(dbg)
+            # Write request debug to file
+            log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+            os.makedirs(log_dir, exist_ok=True)
+            ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+            log_path = os.path.join(log_dir, f"gemini_debug_{ts}.log")
+            with open(log_path, "w", encoding="utf-8") as lf:
+                lf.write("=== Gemini API Debug Log ===\n")
+                lf.write(f"Time: {datetime.now().isoformat()}\n\n")
+                lf.write(self.last_debug_info)
+            self.last_log_path = log_path
+        
+        image_config_kwargs = {}
+        if aspect_ratio and aspect_ratio != "auto":
+            image_config_kwargs["aspect_ratio"] = aspect_ratio
+        if image_size:
+            image_config_kwargs["image_size"] = image_size
+
+        generate_content_config = types.GenerateContentConfig(
+            temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
+            max_output_tokens=GEMINI_25_FLASH_IMAGE_MAX_OUTPUT_TOKEN,
+            response_modalities=["TEXT", "IMAGE"],
+            system_instruction=system_instruction,
+            safety_settings=[
+                types.SafetySetting(
+                    category="HARM_CATEGORY_HATE_SPEECH",
+                    threshold=hate_speech_threshold,
+                ),
+                types.SafetySetting(
+                    category="HARM_CATEGORY_DANGEROUS_CONTENT",
+                    threshold=dangerous_content_threshold,
+                ),
+                types.SafetySetting(
+                    category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                    threshold=sexually_explicit_threshold,
+                ),
+                types.SafetySetting(
+                    category="HARM_CATEGORY_HARASSMENT", threshold=harassment_threshold
+                ),
+            ],
+        )
+        if image_config_kwargs:
+            generate_content_config.image_config = types.ImageConfig(**image_config_kwargs)
+
+        contents = [types.Part.from_text(text=prompt)]
+
+        for i, image_tensor in enumerate([image1, image2, image3, image4, image5, image6, image7, image8, image9, image10, image11, image12, image13, image14]):
+            if image_tensor is not None:
+                for j in range(image_tensor.shape[0]):
+                    single_image = image_tensor[j].unsqueeze(0)
+                    image_bytes = utils.tensor_to_pil_to_bytes(single_image)
+                    contents.append(
+                        types.Part.from_bytes(data=image_bytes, mime_type="image/png")
+                    )
+                    logger.info(f"Appended image {i+1}, part {j+1} to contents.")
+
+        response = self.client.models.generate_content(
+            model=model, contents=contents, config=generate_content_config
+        )
+        
+        # Capture response debug info
+        if debug:
+            rbg = ["--- Response ---"]
+            rbg.append(f"Candidates: {len(response.candidates) if response.candidates else 0}")
+            if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                u = response.usage_metadata
+                rbg.append(f"Prompt tokens: {u.prompt_token_count or '?'}")
+                rbg.append(f"Response tokens: {u.candidates_token_count or '?'}")
+            if hasattr(response, 'prompt_feedback') and response.prompt_feedback:
+                rbg.append(f"Block reason: {response.prompt_feedback.block_reason or 'N/A'}")
+            for part in response.candidates[0].content.parts:
+                if hasattr(part, 'text') and part.text:
+                    rbg.append(f"Text in response: {part.text[:200]}")
+                    break
+            rbg_str = "\n".join(rbg)
+            self.last_debug_info += "\n" + rbg_str
+            logger.info(f"Gemini Debug:\n{self.last_debug_info}")
+
+        for part in response.candidates[0].content.parts:
+            if part.text is not None:
+                logger.info(f"response is {part.text}")
+            elif not part.thought and part.inline_data is not None:
+                image = Image.open(BytesIO(part.inline_data.data))
+                generated_pil_images.append(image)
+
+        return generated_pil_images

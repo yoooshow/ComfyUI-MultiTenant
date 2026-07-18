@@ -260,3 +260,92 @@ async def delete_workflow_template(template_id: int) -> bool:
         return True
     except Exception:
         return False
+
+
+def init_db_sync(db_path: str) -> None:
+    """Synchronous DB initialization — called from setup_routes_sync before server starts."""
+    import os
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            display_name TEXT DEFAULT '',
+            token_balance INTEGER DEFAULT 0 NOT NULL,
+            is_admin INTEGER DEFAULT 0 NOT NULL,
+            is_active INTEGER DEFAULT 1 NOT NULL,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            amount INTEGER NOT NULL,
+            balance_after INTEGER NOT NULL DEFAULT 0,
+            transaction_type TEXT NOT NULL,
+            reference_id TEXT DEFAULT '',
+            description TEXT DEFAULT '',
+            created_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS workflow_templates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            display_name TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            comfyui_workflow TEXT NOT NULL,
+            base_cost INTEGER DEFAULT 10 NOT NULL,
+            cost_per_step INTEGER DEFAULT 1 NOT NULL,
+            cost_per_megapixel INTEGER DEFAULT 5 NOT NULL,
+            is_active INTEGER DEFAULT 1 NOT NULL,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_transactions_user ON transactions(user_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(transaction_type)")
+    conn.commit()
+    conn.close()
+    logging.getLogger(__name__).info(f"Database initialized (sync) at {db_path}")
+
+
+def get_user_sync(db_path: str, username: str | None = None, user_id: int | None = None) -> dict | None:
+    """Synchronous user lookup."""
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    if username:
+        cursor = conn.execute("SELECT * FROM users WHERE username = ?", (username,))
+    elif user_id is not None:
+        cursor = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    else:
+        conn.close()
+        return None
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def create_user_sync(db_path: str, username: str, password_hash: str, display_name: str = "",
+                     token_balance: int = 0, is_admin: bool = False) -> dict | None:
+    """Synchronous user creation."""
+    conn = sqlite3.connect(db_path)
+    try:
+        cursor = conn.execute(
+            "INSERT INTO users (username, password_hash, display_name, token_balance, is_admin) VALUES (?, ?, ?, ?, ?)",
+            (username, password_hash, display_name or username, token_balance, 1 if is_admin else 0),
+        )
+        conn.commit()
+        user_id = cursor.lastrowid
+        cursor = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        row = cursor.fetchone()
+        conn.close()
+        return dict(row) if row else None
+    except Exception as e:
+        conn.close()
+        raise

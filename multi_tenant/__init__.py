@@ -18,13 +18,45 @@ logger = logging.getLogger(__name__)
 def setup_routes_sync(server):
     """Synchronous route/middleware setup — called directly from add_routes().
 
-    This runs immediately (not in a background task), so routes and middleware
-    are registered BEFORE the app runner starts.
+    Initializes DB, creates admin user, registers routes.
+    All synchronous — runs before any requests arrive.
     """
+    # 1. Initialize database synchronously
+    from folder_paths import get_user_directory
+    user_dir = get_user_directory()
+    db_dir = os.path.join(user_dir, "..", "multi_tenant_data")
+    os.makedirs(db_dir, exist_ok=True)
+    db_path = os.path.join(db_dir, "billing.db")
+    set_db_path(db_path)
+
+    from .models import init_db_sync, get_user_sync, create_user_sync
+    init_db_sync(db_path)
+
+    # Create default admin user if not exists
+    from .auth import hash_password
+    admin = get_user_sync(db_path, username="admin")
+    if not admin:
+        admin = create_user_sync(
+            db_path,
+            username="admin",
+            password_hash=hash_password("admin123"),
+            display_name="Administrator",
+            token_balance=999999,
+            is_admin=True,
+        )
+        logger.info("Default admin created: admin / admin123 (balance: 999999)")
+    else:
+        import sqlite3
+    # Reset admin balance to max
+        conn = sqlite3.connect(db_path)
+        conn.execute("UPDATE users SET token_balance = 999999 WHERE id = ?", (admin["id"],))
+        conn.commit()
+        conn.close()
+
+    # 2. Register API routes
     from aiohttp import web as aiohttp_web
     our_routes = aiohttp_web.RouteTableDef()
 
-    # Temporarily replace server.routes so decorators in setup_routes use our table
     original_routes = server.routes
     server.routes = our_routes
     try:
@@ -32,10 +64,9 @@ def setup_routes_sync(server):
     finally:
         server.routes = original_routes
 
-    # Register our API routes with the app
     server.app.add_routes(our_routes)
-
     logger.info("Multi-tenant routes registered (sync)")
+
 
 
 async def setup(server):

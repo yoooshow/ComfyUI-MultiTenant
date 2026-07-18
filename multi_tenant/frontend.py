@@ -470,7 +470,7 @@ function toast(msg,t){var d=document.createElement('div');d.className='toast-fix
     var wfCards=workflows.length?workflows.map(function(w,i){
       var bg=['#eef2ff','#f0fdf4','#fff7ed','#fdf2f8','#f0f9ff'][i%5];
       var est=w.base_cost+20*w.cost_per_step;
-      return '<div class="card" style="background:'+bg+'" onclick="location.href=\'/?workflow='+encodeURIComponent(w.name)+'&token='+encodeURIComponent(T)+'\\'"><div class="name">'+w.display_name+'</div><div class="desc">'+ (w.description||w.name) +'</div><div class="meta"><span class="cost-badge">\\u2248'+est+' \\u901a\\u8bc1</span></div><div class="action"><span class="btn btn-primary btn-sm">\\u5f00\\u59cb\\u751f\\u56fe \\u2192</span></div></div>';
+      return '<div class="card" style="background:'+bg+'" onclick="location.href=\'/?workflow='+encodeURIComponent(w.name)+'\x26token='+encodeURIComponent(T)+'\\'"><div class="name">'+w.display_name+'</div><div class="desc">'+ (w.description||w.name) +'</div><div class="meta"><span class="cost-badge">\\u2248'+est+' \\u901a\\u8bc1</span></div><div class="action"><span class="btn btn-primary btn-sm">\\u5f00\\u59cb\\u751f\\u56fe \\u2192</span></div></div>';
     }).join(''):'<div class="empty">暂无可用的工作流模板，请联系管理员创建</div>';
     var wfSection='<h2>\\u5de5\\u4f5c\\u6d41\\u6a21\\u677f</h2><div class="grid">'+wfCards+'</div>';
 

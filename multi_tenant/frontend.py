@@ -56,7 +56,7 @@ function doLogin(){
   .then(function(d){
     if(d.access_token){
       localStorage.setItem('mt_token',d.access_token);
-      window.location.reload();
+      window.location.href='/?'+new URLSearchParams({token:d.access_token});
     } else {
       err.textContent=d.detail||'登录失败';
       err.style.display='';
@@ -128,8 +128,8 @@ def inject_frontend(server):
                 try:
                     with open(idx_path, "r", encoding="utf-8") as f:
                         html = f.read()
-                    # Inject mt_token for the lock script to pick up
-                    token_script = f'<script>localStorage.setItem("mt_token","{token}");</script>'
+                    # Inject mt_token for the lock script to pick up + clean URL
+                    token_script = f'<script>localStorage.setItem("mt_token","{token}");if(location.search.includes("token="))history.replaceState({{}},"",location.pathname)</script>'
                     lock_script = f'<script id="mt-lock">{_LOCK_JS}</script>'
                     if "</head>" in html:
                         html = html.replace("</head>", f"{token_script}\n</head>")

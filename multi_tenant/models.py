@@ -88,8 +88,10 @@ async def get_user(username: Optional[str] = None, id: Optional[int] = None) -> 
     global _db
     if not _db:
         # Fall back to sync query (DB already initialized by setup_routes_sync)
-        if _db_path:
-            return get_user_sync(_db_path, username=username, user_id=id)
+        from .config import get_db_path
+        path = get_db_path()
+        if path:
+            return get_user_sync(path, username=username, user_id=id)
 
         return None
     if username:

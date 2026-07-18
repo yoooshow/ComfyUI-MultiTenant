@@ -30,7 +30,7 @@ def setup_routes_sync(server):
     set_db_path(db_path)
 
     from .models import init_db_sync, get_user_sync, create_user_sync
-    init_db_sync(db_path)
+    init_db_sync(db_path, server.loop)
 
     # Create default admin user if not exists
     from .auth import hash_password

@@ -262,7 +262,7 @@ async def delete_workflow_template(template_id: int) -> bool:
         return False
 
 
-def init_db_sync(db_path: str) -> None:
+def init_db_sync(db_path: str, loop=None) -> None:
     """Synchronous DB initialization — called from setup_routes_sync before server starts."""
     import os
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
@@ -313,6 +313,18 @@ def init_db_sync(db_path: str) -> None:
     conn.commit()
     conn.close()
     logging.getLogger(__name__).info(f"Database initialized (sync) at {db_path}")
+
+    # Also initialize the async _db connection for use by async handlers
+    if loop is not None:
+        import asyncio
+        async def _init_async():
+            global _db
+            import aiosqlite
+            _db = await aiosqlite.connect(db_path)
+            _db.row_factory = sqlite3.Row
+        fut = asyncio.run_coroutine_threadsafe(_init_async(), loop)
+        fut.result(timeout=30)
+        logging.getLogger(__name__).debug("Async DB connection initialized")
 
 
 def get_user_sync(db_path: str, username: str | None = None, user_id: int | None = None) -> dict | None:

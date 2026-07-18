@@ -45,13 +45,12 @@ def setup_routes_sync(server):
             is_admin=True,
         )
         logger.info("Default admin created: admin / admin123 (balance: 999999)")
-    else:
-        import sqlite3
-        # Reset admin balance to max
-        conn = sqlite3.connect(db_path)
-        conn.execute("UPDATE users SET token_balance = 999999 WHERE id = ?", (admin["id"],))
-        conn.commit()
-        conn.close()
+    # Reset admin password + balance (in case old DB has different hash)
+    import sqlite3
+    conn = sqlite3.connect(db_path)
+    conn.execute("UPDATE users SET token_balance = 999999, password_hash = ? WHERE username = 'admin'", (hash_password("admin123"),))
+    conn.commit()
+    conn.close()
 
     # 2. Register API routes
     from aiohttp import web as aiohttp_web

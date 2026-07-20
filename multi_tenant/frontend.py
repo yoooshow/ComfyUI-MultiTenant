@@ -215,7 +215,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans S
 .btn-primary:hover{background:#3d5bd9}
 .btn-danger{background:#e74c3c;color:#fff}
 .btn-sm{padding:.3rem .6rem;font-size:.8rem}
-.btn-outline{background:transparent;border:1px solid #d0d5dd;color:#1a1d23}.navbar .btn-outline{color:#fff;border-color:rgba(255,255,255,.35)}
+.btn-outline{background:transparent;border:1px solid #d0d5dd;color:#1a1d23}.navbar .btn-outline{color:#fff;border-color:rgba(255,255,255,.35)}.navbar .btn-outline{color:#fff;border-color:hsla(0,0%,100%,.35)}.navbar .btn-outline{color:#fff;border-color:hsla(0,0%,100%,.35)}.navbar .btn-outline{color:#fff;border-color:rgba(255,255,255,.35)}
 .btn-outline:hover{background:#f0f2f5}
 .container{max-width:1100px;margin:0 auto;padding:2rem}
 h1{font-size:1.4rem;font-weight:700;margin-bottom:1.25rem}
@@ -256,7 +256,7 @@ input:focus{outline:none;border-color:#4f6ef7}
   <div class="user-info">
     <span class="bal" id="nav-bal">通证: ---</span>
     <span id="nav-user"></span>
-    <button class="btn btn-sm btn-outline" onclick="location.href='/'">返回工作台</button>
+    <button class="btn btn-sm btn-outline" onclick="location.href='/?'+new URLSearchParams({token:token})">返回工作台</button>
   </div>
 </div>
 <div class="container">
@@ -274,7 +274,7 @@ var API_BASE = window.location.origin;
 var token = localStorage.getItem('mt_token');
 
 function toast(msg,type){var d=document.createElement('div');d.className='toast-fixed';d.style.background=type==='error'?'#ef4444':'#10b981';d.textContent=msg;document.body.appendChild(d);setTimeout(function(){d.remove()},3000)}
-function api(m,p,b){return fetch(API_BASE+p,{method:m||'GET',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:b?JSON.stringify(b):null}).then(function(r){if(r.status===401){location.href='/'}if(r.status===204)return null;return r.json()})}
+function api(m,p,b){return fetch(API_BASE+p,{method:m||'GET',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:b?JSON.stringify(b):null}).then(function(r){if(r.status===401){location.href='/';throw Error('Unauthorized')}if(r.status===204)return null;if(!r.ok)return r.json().then(function(e){throw Error(e.detail||'HTTP '+r.status)});return r.json()})}
 function showModal(html){document.getElementById('modal-body').innerHTML=html;document.getElementById('modal').style.display='flex'}
 function hideModal(){document.getElementById('modal').style.display='none'}
 function switchTab(tab){document.querySelectorAll('.tab').forEach(function(t){t.classList.toggle('active',t.dataset.tab===tab)});renderTab(tab)}
@@ -430,7 +430,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans S
 .empty{text-align:center;color:#98a2b3;padding:3rem}
 .btn{display:inline-flex;align-items:center;gap:.4rem;padding:.45rem 1rem;border:none;border-radius:6px;font-size:.85rem;font-weight:500;cursor:pointer;white-space:nowrap;text-decoration:none}
 .btn-primary{background:#4f6ef7;color:#fff}
-.btn-outline{background:transparent;border:1px solid #d0d5dd;color:#1a1d23}
+.btn-outline{background:transparent;border:1px solid #d0d5dd;color:#1a1d23}.navbar .btn-outline{color:#fff;border-color:rgba(255,255,255,.35)}
 h2{font-size:1.1rem;font-weight:600;margin-bottom:1rem;color:#344054}
 </style>
 </head>

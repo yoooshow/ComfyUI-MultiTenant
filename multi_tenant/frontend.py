@@ -215,7 +215,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans S
 .btn-primary:hover{background:#3d5bd9}
 .btn-danger{background:#e74c3c;color:#fff}
 .btn-sm{padding:.3rem .6rem;font-size:.8rem}
-.btn-outline{background:transparent;border:1px solid #d0d5dd;color:#1a1d23}.navbar .btn-outline{color:#fff;border-color:rgba(255,255,255,.35)}.navbar .btn-outline{color:#fff;border-color:hsla(0,0%,100%,.35)}.navbar .btn-outline{color:#fff;border-color:hsla(0,0%,100%,.35)}.navbar .btn-outline{color:#fff;border-color:rgba(255,255,255,.35)}
+.btn-outline{background:transparent;border:1px solid #d0d5dd;color:#d0d5dd}.navbar .btn-outline{color:#fff;border-color:rgba(255,255,255,.35)}.navbar .btn-outline{color:#fff;border-color:hsla(0,0%,100%,.35)}.navbar .btn-outline{color:#fff;border-color:hsla(0,0%,100%,.35)}.navbar .btn-outline{color:#fff;border-color:rgba(255,255,255,.35)}
 .btn-outline:hover{background:#f0f2f5}
 .container{max-width:1100px;margin:0 auto;padding:2rem}
 h1{font-size:1.4rem;font-weight:700;margin-bottom:1.25rem}
@@ -430,7 +430,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans S
 .empty{text-align:center;color:#98a2b3;padding:3rem}
 .btn{display:inline-flex;align-items:center;gap:.4rem;padding:.45rem 1rem;border:none;border-radius:6px;font-size:.85rem;font-weight:500;cursor:pointer;white-space:nowrap;text-decoration:none}
 .btn-primary{background:#4f6ef7;color:#fff}
-.btn-outline{background:transparent;border:1px solid #d0d5dd;color:#1a1d23}.navbar .btn-outline{color:#fff;border-color:rgba(255,255,255,.35)}
+.btn-outline{background:transparent;border:1px solid #d0d5dd;color:#d0d5dd}.navbar .btn-outline{color:#fff;border-color:rgba(255,255,255,.35)}
 h2{font-size:1.1rem;font-weight:600;margin-bottom:1rem;color:#344054}
 </style>
 </head>

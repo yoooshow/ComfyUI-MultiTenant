@@ -215,7 +215,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans S
 .btn-primary:hover{background:#3d5bd9}
 .btn-danger{background:#e74c3c;color:#fff}
 .btn-sm{padding:.3rem .6rem;font-size:.8rem}
-.btn-outline{background:transparent;border:1px solid #d0d5dd;color:#1a1d23}
+.btn-outline{background:transparent;border:1px solid #d0d5dd;color:#1a1d23}.navbar .btn-outline{color:#fff;border-color:rgba(255,255,255,.35)}
 .btn-outline:hover{background:#f0f2f5}
 .container{max-width:1100px;margin:0 auto;padding:2rem}
 h1{font-size:1.4rem;font-weight:700;margin-bottom:1.25rem}
@@ -390,8 +390,15 @@ def inject_admin_route(server):
         if not payload:
             return web.HTTPFound("/")
 
-        # Serve the admin panel HTML
-        return web.Response(text=_ADMIN_PAGE, content_type="text/html")
+        # Serve the admin panel HTML with token injection
+        html = _ADMIN_PAGE
+        idx = html.find("</head>")
+        if idx > 0:
+            ts = '<script>localStorage.setItem("mt_token","' + token + '")'
+            ts += ';if(location.search.includes("token="))'
+            ts += 'history.replaceState({},"",location.pathname)</script>\n'
+            html = html[:idx] + ts + html[idx:]
+        return web.Response(text=html, content_type="text/html")
 
     server.app.router.add_get("/admin", admin_handler)
     logger.info("Admin panel registered at /admin")

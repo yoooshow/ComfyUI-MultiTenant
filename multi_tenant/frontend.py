@@ -415,7 +415,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Noto San
 <div class=\"user-info\">
 <span class=\"bal\" id=\"bal\">\u901a\u8bc1: ---</span>
 <span id=\"user\"></span>
-<a id=\"admin\" class=\"btn btn-sm btn-outline\" style=\"display:none\">\u7ba1\u7406\u540e\u53f0</a>
+<a id=\"admin\" class=\"btn btn-sm btn-outline\" href=\"/admin\">\u7ba1\u7406\u540e\u53f0</a>
 <button id=\"logout\" class=\"btn btn-sm btn-outline\">\u9000\u51fa</button>
 </div></div>
 <div class=\"container\"><div id=\"content\" class=\"loading\">\u52a0\u8f7d\u4e2d...</div></div>

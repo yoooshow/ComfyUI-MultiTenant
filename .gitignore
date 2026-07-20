@@ -24,3 +24,4 @@ web_custom_versions/
 filtered-openapi.yaml
 uv.lock
 .comfy_environment
+custom_nodes/google-genmedia-nodes/google_genmedia/settings.json

@@ -121,7 +121,7 @@ def inject_frontend(server):
             if payload:
                 workflow = request.query.get("workflow", "")
                 if workflow:
-                    return await _serve_comfyui(request, token, payload, web_root)
+                    return await _serve_comfyui(request, token, payload, web_root, workflow)
                 else:
                     from .models import get_workflow_templates, get_user
                     uid = payload.get("user_id")
@@ -159,24 +159,55 @@ def inject_frontend(server):
             )
         return web.Response(text=html, content_type="text/html")
 
-    async def _serve_comfyui(request, token, payload, web_root):
-        """Serve ComfyUI index.html with lock/billing scripts injected."""
+    async def _serve_comfyui(request, token, payload, web_root, workflow_name=""):
+        """Serve ComfyUI index.html with lock/billing scripts and workflow injection."""
         idx_path = os.path.join(web_root, "index.html")
         if not os.path.exists(idx_path):
             return web.HTTPNotFound()
         try:
             with open(idx_path, "r", encoding="utf-8") as f:
                 html = f.read()
+            
             token_script = (
                 f'<script>localStorage.setItem("mt_token","{token}");'
                 f'if(location.search.includes("token="))'
                 f'history.replaceState({{}},"",location.pathname)</script>'
             )
             lock_script = f'<script id="mt-lock">{_LOCK_JS}</script>'
+            
+            # Add workflow injection script (fetches template from API)
+            wf_loader = (
+                '<script id="mt-wf-loader">'
+                '(function(){'
+                'var wfName = localStorage.getItem("mt_wf") || "' + workflow_name + '";'
+                'if(!wfName) return;'
+                'var token = localStorage.getItem("mt_token");'
+                'if(!token) return;'
+                'fetch("/api/jobs/workflows",{headers:{"Authorization":"Bearer "+token}})'
+                '.then(function(r){return r.json()})'
+                '.then(function(list){'
+                '  var tpl = list.find(function(w){return w.name===wfName});'
+                '  if(!tpl || !tpl.comfyui_workflow) return;'
+                '  var wf = tpl.comfyui_workflow;'
+                '  function tryLoad(){'
+                '    if(!window.app||!window.app.graph) return setTimeout(tryLoad,500);'
+                '    var isApi = wf && typeof wf==="object" && !wf.nodes && Object.keys(wf).some(function(k){return /^\\d+$/.test(k)&&wf[k]&&wf[k].class_type});'
+                '    try{'
+                '      if(isApi&&typeof window.app.loadApiJson==="function"){window.app.loadApiJson(wf);return}'
+                '      if(typeof window.app.loadGraphData==="function"){window.app.loadGraphData(wf);return}'
+                '      if(window.app.graph) window.app.graph.configure(wf);'
+                '    }catch(e){console.log("[MT] Load error:",e);setTimeout(tryLoad,1000)}'
+                '  }'
+                '  tryLoad();'
+                '}).catch(function(e){console.log("[MT] Fetch error:",e)});'
+                '})();'
+                '</script>'
+            )
+            
             if "</head>" in html:
                 html = html.replace("</head>", f"{token_script}\n</head>")
             if "</body>" in html:
-                html = html.replace("</body>", f"{lock_script}\n</body>")
+                html = html.replace("</body>", f"{wf_loader}\n{lock_script}\n</body>")
             return web.Response(text=html, content_type="text/html")
         except Exception as e:
             logger.error(f"Failed to serve index.html: {e}")

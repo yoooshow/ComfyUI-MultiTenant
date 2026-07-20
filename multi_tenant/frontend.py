@@ -84,7 +84,7 @@ if(!mt) return;
 fetch('/api/users/me/balance',{headers:{'Authorization':'Bearer '+mt}}).then(function(r){return r.json()}).then(function(d){
   var e=document.getElementById('mt-bal');if(e)e.textContent='\\u901a\\u8bc1: '+(d.token_balance||0);
 }).catch(function(){});
-var de=document.createElement('div');de.id='mt-bal';de.style.cssText='position:fixed;bottom:12px;left:12px;z-index:99999;background:rgba(0,0,0,0.75);color:#fff;padding:8px 14px;border-radius:6px;font-size:13px;backdrop-filter:blur(4px);pointer-events:none';de.textContent='\\u901a\\u8bc1: ---';document.body.appendChild(de);
+var de=document.createElement('div');de.id='mt-bal';de.style.cssText='position:fixed;bottom:12px;left:12px;z-index:99999;background:rgba(0,0,0,0.75);color:#fff;padding:8px 14px;border-radius:6px;font-size:13px;backdrop-filter:blur(4px);pointer-events:none';de.textContent='\\u901a\\u8bc1: ---';document.body.appendChild(de);var bb=document.createElement('a');bb.href='/?token='+encodeURIComponent(mt);bb.textContent='← 返回';bb.style.cssText='position:fixed;top:12px;right:12px;z-index:99999;background:rgba(0,0,0,0.75);color:#fff;padding:6px 14px;border-radius:6px;font-size:13px;font-family:sans-serif;text-decoration:none;backdrop-filter:blur(4px)';document.body.appendChild(bb);
 var _f=window.fetch;window.fetch=function(u,o){if(o&&o.method==='POST'&&typeof u==='string'&&(u.indexOf('/prompt')>=0||u.indexOf('/queue')>=0)){
   var b;try{b=JSON.parse(o.body)}catch(e){return _f.apply(this,arguments)}
   var t=localStorage.getItem('mt_token');if(!t){return new Response('{}',{status:401})}

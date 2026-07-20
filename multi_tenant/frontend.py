@@ -123,7 +123,24 @@ def inject_frontend(server):
                 if workflow:
                     return await _serve_comfyui(request, token, payload, web_root)
                 else:
+                    from .models import get_workflow_templates, get_user
+                    uid = payload.get("user_id")
+                    user = await get_user(id=uid) if uid else None
+                    bal = user["token_balance"] if user else 0
+                    templates = await get_workflow_templates(active_only=True)
+                    cards = ""
+                    if templates:
+                        bg_colors = ["#eef2ff","#f0fdf4","#fff7ed","#fdf2f8","#f0f9ff"]
+                        for i, t in enumerate(templates):
+                            bg = bg_colors[i % 5]
+                            name = t.get("display_name", t["name"])
+                            desc = (t.get("description") or t["name"]).replace('"', "")
+                            cards += '<a class="card" href="/?workflow=' + t["name"] + '&token=' + token + '" style="background:' + bg + '"><div class="name">' + name + '</div><div class="desc">' + desc + '</div></a>\n'
+                    else:
+                        cards = '<div class="empty">\u6682\u65e0\u53ef\u7528\u7684\u5de5\u4f5c\u6d41<br><a href="/admin" class="btn btn-primary btn-sm" style="margin-top:12px">\u7ba1\u7406\u540e\u53f0</a></div>'
                     html = _LANDING_PAGE
+                    html = html.replace("_BALANCE_", str(bal))
+                    html = html.replace("_CARDS_", cards)
                     idx = html.find("</head>")
                     if idx > 0:
                         ts = '<script>localStorage.setItem("mt_token","' + token + '");'
@@ -380,86 +397,49 @@ def inject_admin_route(server):
 
 # ── Landing/Dashboard Page (shown after login, before entering ComfyUI) ──
 _LANDING_PAGE = """<!DOCTYPE html>
-<html lang=\"zh-CN\">
+<html lang="zh-CN">
 <head>
-<meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">
-<title>ComfyUI \u591a\u79df\u6237</title>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ComfyUI 多租户</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Noto Sans SC\",sans-serif;background:#f5f6fa;color:#1a1d23;min-height:100vh}
-.navbar{display:flex;align-items:center;gap:1rem;padding:0 2rem;height:56px;background:#1a1d23;color:#fff;position:sticky;top:0;z-index:100}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans SC",sans-serif;background:#f5f6fa;color:#1a1d23;min-height:100vh}
+.navbar{display:flex;align-items:center;gap:1rem;padding:0 2rem;height:56px;background:#1a1d23;color:#fff}
 .navbar .brand{font-weight:700;font-size:1.1rem;flex:1}
 .navbar .brand a{color:#fff;text-decoration:none}
 .navbar .user-info{display:flex;align-items:center;gap:.75rem;font-size:.9rem}
 .navbar .user-info .bal{background:rgba(79,110,247,.2);border:1px solid rgba(79,110,247,.35);border-radius:20px;padding:.25rem .7rem;font-size:.8rem;font-weight:600}
 .container{max-width:1100px;margin:0 auto;padding:2rem}
-.hero{background:linear-gradient(135deg,#1a1d23 0%,#25262b 100%);border-radius:12px;padding:2.5rem;margin-bottom:2rem;color:#fff;display:flex;align-items:center;justify-content:space-between}
-.hero h1{font-size:1.8rem;font-weight:700}
-.hero p{color:#98a2b3;font-size:.9rem;margin-top:.5rem}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem;margin-bottom:2rem}
-.card{background:#fff;border:1px solid #e2e5ea;border-radius:10px;padding:1.25rem 1.5rem;cursor:pointer;transition:all .2s}
+.hero{background:linear-gradient(135deg,#1a1d23 0%,#25262b 100%);border-radius:12px;padding:2rem;margin-bottom:2rem;color:#fff}
+.hero h1{font-size:1.5rem;font-weight:700;margin-bottom:4px}
+.hero p{color:#98a2b3;font-size:.9rem}
+.hero .bal{font-size:2rem;font-weight:800;color:#4f6ef7;margin-top:.5rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem}
+.card{background:#fff;border:1px solid #e2e5ea;border-radius:10px;padding:1.25rem 1.5rem;cursor:pointer;transition:all .2s;text-decoration:none;color:inherit;display:block}
 .card:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,.08)}
-.card .name{font-size:1rem;font-weight:600;margin-bottom:.25rem}
-.card .desc{font-size:.85rem;color:#667085;margin-bottom:.75rem}
-.card .action{text-align:right;margin-top:.75rem}
+.card .name{font-size:1rem;font-weight:600;margin-bottom:.25rem;color:#1a1d23}
+.card .desc{font-size:.85rem;color:#667085}
 .empty{text-align:center;color:#98a2b3;padding:3rem}
-.loading{text-align:center;padding:3rem;color:#98a2b3}
-.btn{display:inline-flex;align-items:center;gap:.4rem;padding:.45rem 1rem;border:none;border-radius:6px;font-size:.85rem;font-weight:500;cursor:pointer;white-space:nowrap;transition:all .15s}
+.btn{display:inline-flex;align-items:center;gap:.4rem;padding:.45rem 1rem;border:none;border-radius:6px;font-size:.85rem;font-weight:500;cursor:pointer;white-space:nowrap;text-decoration:none}
 .btn-primary{background:#4f6ef7;color:#fff}
 .btn-outline{background:transparent;border:1px solid #d0d5dd;color:#1a1d23}
-.btn-sm{padding:.3rem .6rem;font-size:.8rem}
+h2{font-size:1.1rem;font-weight:600;margin-bottom:1rem;color:#344054}
 </style>
 </head>
 <body>
-<div class=\"navbar\"><div class=\"brand\"><a href=\"/\">ComfyUI \u591a\u79df\u6237</a></div>
-<div class=\"user-info\">
-<span class=\"bal\" id=\"bal\">\u901a\u8bc1: ---</span>
-<span id=\"user\"></span>
-<a id=\"admin\" class=\"btn btn-sm btn-outline\" href=\"/admin\">\u7ba1\u7406\u540e\u53f0</a>
-<button id=\"logout\" class=\"btn btn-sm btn-outline\">\u9000\u51fa</button>
+<div class="navbar"><div class="brand"><a href="/">ComfyUI 多租户</a></div>
+<div class="user-info">
+<span class="bal">通证: _BALANCE_</span>
+<a id="admin" class="btn btn-sm btn-outline" href="/admin" style="margin-left:8px">管理后台</a>
+<a href="/" class="btn btn-sm btn-outline" onclick="localStorage.removeItem('mt_token')">退出</a>
 </div></div>
-<div class=\"container\"><div id=\"content\" class=\"loading\">\u52a0\u8f7d\u4e2d...</div></div>
-<script>(function(){
-
-var T=localStorage.getItem(\'mt_token\');
-if(!T){location.href=\"/\";return}
-function fetchJSON(url){return fetch(url,{headers:{\"Authorization\":\"Bearer \"+T}}).then(function(r){return r.json()})}
-fetchJSON(\'/api/auth/me\').then(function(u){
-  document.getElementById(\'user\').textContent=u.display_name||u.username;
-  if(u.is_admin)document.getElementById(\'admin\').style.display=\"\";
-}).catch(function(e){document.getElementById(\'content\').className=\"empty\";document.getElementById(\'content\').textContent=\"\u52a0\u8f7d\u5931\u8d25\"});
-fetchJSON(\'/api/users/me/balance\').then(function(d){document.getElementById(\'bal\').textContent=\"\u901a\u8bc1: \"+d.token_balance.toLocaleString()});
-fetchJSON(\'/api/jobs/workflows\').then(function(wfs){
-  var el=document.getElementById(\'content\');
-  if(!wfs||!wfs.length){
-    el.className=\"empty\";el.innerHTML='\u6682\u65e0\u53ef\u7528\u7684\u5de5\u4f5c\u6d41<br><span style=\"font-size:.85rem;color:#98a2b3;margin-top:.5rem;display:block\">\u524d\u5f80\u7ba1\u7406\u540e\u53f0\u521b\u5efa</span>\n    <a href="/admin" class="btn btn-primary btn-sm" style="margin-top:12px">\u7ba1\u7406\u540e\u53f0</a>';
-    return;
-  }
-  var cards=wfs.map(function(w,i){
-    var bg=[\"#eef2ff\",\"#f0fdf4\",\"#fff7ed\",\"#fdf2f8\",\"#f0f9ff\"][i%5];
-    return \'<div class=\"card\" data-name=\"\'+w.name+\'\" style=\"background:\'+bg+\'\"><div class=\"name\">\'+w.display_name+\'</div><div class=\"desc\">\'+(w.description||w.name)+\'</div><div class=\"action\"><span class=\"btn btn-primary btn-sm\">\u5f00\u59cb\u751f\u56fe \u2192</span></div></div>\';
-  }).join(\"\");
-  el.innerHTML=\'<div class=\"hero\"><div><h1>ComfyUI \u5de5\u4f5c\u53f0</h1><p>\u9009\u62e9\u5de5\u4f5c\u6d41\u5f00\u59cb\u751f\u56fe</p></div></div><h2>\u5de5\u4f5c\u6d41\u6a21\u677f</h2><div class=\"grid\">\'+cards+\'</div>\';
-  el.addEventListener(\"click\",function(e){
-    var c=e.target.closest(\'.card\');
-    if(c&&c.dataset.name)location.href=\"/?workflow=\"+encodeURIComponent(c.dataset.name)+\"&token=\"+encodeURIComponent(T);
-  });
-});
-document.getElementById(\'admin\').onclick=function(){location.href=\"/admin\"};
-document.getElementById(\'logout\').onclick=function(){localStorage.removeItem(\'mt_token\');location.href=\"/\"};
-})();
-</script>
+<div class="container">
+<div class="hero"><div><h1>ComfyUI 工作台</h1><p>选择一个工作流开始生图</p></div></div>
+<h2>工作流模板</h2>
+_CARDS_
+</div>
 </body>
 </html>"""
 
-
 def inject_landing_page(server):
-    """Modify root_handler to serve landing page when authenticated."""
-    from .auth import verify_token
-
-    # We need to modify the existing root_handler. Since we already registered it,
-    # let's override it by registering a new handler with higher priority.
-    # Actually, since we control the root_handler in inject_frontend, let's
-    # just update the inject_frontend function to include this logic.
-    # For now, this function is called from inject_frontend to add the landing page.
     pass

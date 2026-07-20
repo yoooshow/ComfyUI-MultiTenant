@@ -126,9 +126,9 @@ def inject_frontend(server):
                     html = _LANDING_PAGE
                     idx = html.find("</head>")
                     if idx > 0:
-                        ts = f'<script>localStorage.setItem("mt_token","{token}")'
-                        ts += ';if(location.search.includes("token="))'
-                        ts += f'history.replaceState({{}},"",location.pathname)</script>\n'
+                        ts = '<script>localStorage.setItem("mt_token","' + token + '");'
+                        ts += 'if(location.search.includes("token="))'
+                        ts += 'history.replaceState({},"",location.pathname)</script>\n'
                         html = html[:idx] + ts + html[idx:]
                     return web.Response(text=html, content_type="text/html")
 
@@ -446,7 +446,7 @@ th{font-weight:600;color:#667085;font-size:.78rem;text-transform:uppercase}
 </div>
 <script>
 var T=localStorage.getItem('mt_token');
-function api(m,p,b){return fetch(location.origin+p,{method:m||'GET',headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},body:b?JSON.stringify(b):null})}
+function api(m,p,b){return fetch(location.origin+p,{method:m||'GET',headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},body:b?JSON.stringify(b):null}).then(function(r){return r.json()})}
 function toast(msg,t){var d=document.createElement('div');d.className='toast-fixed';d.style.background=t==='error'?'#ef4444':'#10b981';d.textContent=msg;document.body.appendChild(d);setTimeout(function(){d.remove()},3000)}
 
 (function(){
@@ -456,8 +456,7 @@ function toast(msg,t){var d=document.createElement('div');d.className='toast-fix
   Promise.all([
     api('GET','/api/auth/me').then(function(u){user=u;document.getElementById('nav-user').textContent=u.display_name||u.username;if(u.is_admin)document.getElementById('nav-admin').style.display=''}),
     api('GET','/api/users/me/balance').then(function(d){bal=d.token_balance;document.getElementById('nav-bal').textContent='\\u901a\\u8bc1: '+bal.toLocaleString()}),
-    api('GET','/api/jobs/workflows').then(function(w){workflows=w||[]}),
-    api('GET','/api/jobs/?page=1&page_size=10').then(function(d){jobs=(d.items||[]).slice(0,5)})
+    api('GET','/api/jobs/workflows').then(function(w){workflows=w||[]})
   ]).then(function(){
     var el=document.getElementById('content');
     var myBal=bal||0;

@@ -362,6 +362,7 @@ def setup_routes(server):
     @server.routes.get("/api/jobs/workflows")
     async def list_public_workflows(request):
         """List active workflow templates."""
+        templates = await get_workflow_templates(active_only=True)
         return web.json_response([
             {
                 "id": t["id"],

@@ -432,7 +432,7 @@ fetchJSON(\'/api/users/me/balance\').then(function(d){document.getElementById(\'
 fetchJSON(\'/api/jobs/workflows\').then(function(wfs){
   var el=document.getElementById(\'content\');
   if(!wfs||!wfs.length){
-    el.className=\"empty\";el.innerHTML='\u6682\u65e0\u53ef\u7528\u7684\u5de5\u4f5c\u6d41<br><span style=\"font-size:.85rem;color:#98a2b3;margin-top:.5rem;display:block\">\u8bf7\u8054\u7cfb\u7ba1\u7406\u5458\u521b\u5efa</span>';
+    el.className=\"empty\";el.innerHTML='\u6682\u65e0\u53ef\u7528\u7684\u5de5\u4f5c\u6d41<br><span style=\"font-size:.85rem;color:#98a2b3;margin-top:.5rem;display:block\">\u524d\u5f80\u7ba1\u7406\u540e\u53f0\u521b\u5efa</span>\n    <a href="/admin" class="btn btn-primary btn-sm" style="margin-top:12px">\u7ba1\u7406\u540e\u53f0</a>';
     return;
   }
   var cards=wfs.map(function(w,i){

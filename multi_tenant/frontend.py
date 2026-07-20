@@ -137,10 +137,10 @@ def inject_frontend(server):
                             desc = (t.get("description") or t["name"]).replace('"', "")
                             cards += '<a class="card" href="/?workflow=' + t["name"] + '&token=' + token + '" style="background:' + bg + '"><div class="name">' + name + '</div><div class="desc">' + desc + '</div></a>\n'
                     else:
-                        cards = '<div class="empty">\u6682\u65e0\u53ef\u7528\u7684\u5de5\u4f5c\u6d41<br><a href="/admin" class="btn btn-primary btn-sm" style="margin-top:12px">\u7ba1\u7406\u540e\u53f0</a></div>'
+                        cards = '<div class="empty">\u6682\u65e0\u53ef\u7528\u7684\u5de5\u4f5c\u6d41<br><a href="/admin?token=' + token + '" class="btn btn-primary btn-sm" style="margin-top:12px">\u7ba1\u7406\u540e\u53f0</a></div>'
                     html = _LANDING_PAGE
                     html = html.replace("_BALANCE_", str(bal))
-                    html = html.replace("_ADMIN_URL_", "/admin?token=" + token)
+                    html = html.replace("_ADMIN_URL_", "/admin?token=" + token); html = html.replace('href="/admin"', 'href="/admin?token=' + token + '"')
                     html = html.replace("_CARDS_", cards)
                     idx = html.find("</head>")
                     if idx > 0:

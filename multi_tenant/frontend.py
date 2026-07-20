@@ -107,6 +107,7 @@ _LOCK_JS = """
 (function(){
 var mt=localStorage.getItem('mt_token');
 if(!mt) return;
+var WF_NAME=(new URLSearchParams(location.search)).get('workflow')||'';
 fetch('/api/users/me/balance',{headers:{'Authorization':'Bearer '+mt}}).then(function(r){return r.json()}).then(function(d){
   var e=document.getElementById('mt-bal');if(e)e.textContent='\\u901a\\u8bc1: '+(d.token_balance||0);
 }).catch(function(){});
@@ -123,10 +124,11 @@ var de=document.createElement('div');de.id='mt-bal';de.style.cssText='position:f
 var _f=window.fetch;window.fetch=function(u,o){if(o&&o.method==='POST'&&typeof u==='string'&&(u.indexOf('/prompt')>=0||u.indexOf('/queue')>=0)){
   var b;try{b=JSON.parse(o.body)}catch(e){return _f.apply(this,arguments)}
   var t=localStorage.getItem('mt_token');if(!t){return new Response('{}',{status:401})}
-  return fetch('/api/workspace/execute',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},body:JSON.stringify({workflow_data:b.prompt||b})})
-  .then(function(r){return r.json()}).then(function(d){
-    var e=document.getElementById('mt-bal');if(e)e.textContent='\\u901a\\u8bc1: '+(d.token_balance||'?');
-    return new Response(JSON.stringify({prompt_id:d.prompt_id,number:1,node_errors:{}}),{status:200,headers:{'Content-Type':'application/json'}});
+  return fetch('/api/workspace/execute',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},body:JSON.stringify({workflow_name:WF_NAME||'unknown',workflow_data:b.prompt||b})})
+  .then(function(r){return r.json()})
+  .then(function(d){
+    var e=document.getElementById('mt-bal');if(e)e.textContent='通证: '+(d.token_balance||'?');
+    return _f(u,o);
   }).catch(function(){return _f.apply(this,arguments)});
 }return _f.apply(this,arguments)};
 })();

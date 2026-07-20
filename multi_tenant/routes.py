@@ -186,27 +186,17 @@ def setup_routes(server):
             description=f"执行工作流 ({cost} 通证)",
         )
 
-        # Queue the prompt to ComfyUI
-        try:
-            prompt_id = server.prompt_queue.add(workflow_data)
-            if not prompt_id:
-                # Refund
-                await update_user_balance(user["id"], cost)
-                return web.json_response({"detail": "队列已满"}, status=503)
+        # Tokens deducted. Actual queuing via lock script -> original /prompt
+        import time
+        from .config import pending_bills as _pending_bills
+        prompt_id = "pending-" + str(int(time.time()))
+        _pending_bills[prompt_id] = {
+            "user_id": user["id"],
+            "cost": cost,
+            "prompt_name": data.get("workflow_name", "unknown"),
+            "start_time": time.time(),
+        }
 
-            # Track for billing poller
-            import time
-            from .config import pending_bills as _pending_bills
-            _pending_bills[prompt_id] = {
-                "user_id": user["id"],
-                "cost": cost,
-                "prompt_name": data.get("workflow_name", "unknown"),
-                "start_time": time.time(),
-            }
-        except Exception as e:
-            await update_user_balance(user["id"], cost)
-            logger.exception("Failed to queue prompt")
-            return web.json_response({"detail": f"提交失败: {e}"}, status=502)
 
         return web.json_response({
             "status": "queued",

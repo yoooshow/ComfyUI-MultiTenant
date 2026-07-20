@@ -41,10 +41,36 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
     <input id="mt-p" type="password" placeholder="密码" autocomplete="current-password">
     <button id="mt-btn" onclick="doLogin()">登录</button>
     <div id="mt-err" class="error"></div>
-    <p class="hint">默认: admin / admin123</p>
+    <p class="hint"><a href="#" id="toggle-reg" style="color:#4f6ef7;text-decoration:none;font-size:13px">没有账号？注册</a></p>
+  </div>
+  <div class="form-card" id="register-form" style="display:none">
+    <input id="reg-u" placeholder="用户名" autocomplete="username">
+    <input id="reg-e" placeholder="邮箱" autocomplete="email">
+    <input id="reg-p" type="password" placeholder="密码" autocomplete="new-password">
+    <input id="reg-d" placeholder="显示名称(可选)">
+    <button id="reg-btn" onclick="doRegister()">注册</button>
+    <div id="reg-err" class="error"></div>
+    <p class="hint"><a href="#" id="toggle-reg-back" style="color:#4f6ef7;text-decoration:none;font-size:13px">已有账号？登录</a></p>
   </div>
 </div>
 <script>
+function toggleRegister(){
+  var l=document.getElementById("login-form");l.style.display="none";
+  document.getElementById("register-form").style.display=""
+}
+function doRegister(){
+  var u=document.getElementById("reg-u").value;
+  var e=document.getElementById("reg-e").value;
+  var p=document.getElementById("reg-p").value;
+  var d=document.getElementById("reg-d").value;
+  if(!u||!p){document.getElementById("reg-err").textContent="请填写用户名和密码";document.getElementById("reg-err").style.display="";return}
+  document.getElementById("reg-btn").disabled=true;
+  fetch("/api/auth/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:u,email:e||u+"@local",password:p,display_name:d||u})})
+  .then(function(r){return r.json()}).then(function(d){
+    if(d.access_token){localStorage.setItem("mt_token",d.access_token);window.location.href="/?token="+encodeURIComponent(d.access_token)}
+    else{document.getElementById("reg-err").textContent=d.detail||"注册失败";document.getElementById("reg-err").style.display="";document.getElementById("reg-btn").disabled=false}
+  }).catch(function(){document.getElementById("reg-err").textContent="网络错误";document.getElementById("reg-err").style.display="";document.getElementById("reg-btn").disabled=false});
+}
 function doLogin(){
   var u=document.getElementById('mt-u').value;
   var p=document.getElementById('mt-p').value;

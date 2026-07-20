@@ -140,6 +140,7 @@ def inject_frontend(server):
                         cards = '<div class="empty">\u6682\u65e0\u53ef\u7528\u7684\u5de5\u4f5c\u6d41<br><a href="/admin" class="btn btn-primary btn-sm" style="margin-top:12px">\u7ba1\u7406\u540e\u53f0</a></div>'
                     html = _LANDING_PAGE
                     html = html.replace("_BALANCE_", str(bal))
+                    html = html.replace("_ADMIN_URL_", "/admin?token=" + token)
                     html = html.replace("_CARDS_", cards)
                     idx = html.find("</head>")
                     if idx > 0:
@@ -430,7 +431,7 @@ h2{font-size:1.1rem;font-weight:600;margin-bottom:1rem;color:#344054}
 <div class="navbar"><div class="brand"><a href="/">ComfyUI 多租户</a></div>
 <div class="user-info">
 <span class="bal">通证: _BALANCE_</span>
-<a id="admin" class="btn btn-sm btn-outline" href="/admin" style="margin-left:8px">管理后台</a>
+<a id="admin" class="btn btn-sm btn-outline" href="_ADMIN_URL_" style="margin-left:8px">管理后台</a>
 <a href="/" class="btn btn-sm btn-outline" onclick="localStorage.removeItem('mt_token')">退出</a>
 </div></div>
 <div class="container">

@@ -38,4 +38,4 @@ fi
 echo "=== Starting ComfyUI-MultiTenant ==="
 echo "Open http://<this-mac-ip>:8188 or http://127.0.0.1:8188 and login with admin / admin123"
 echo ""
-$PYTHON main.py --listen 0.0.0.0 "$@"
+$PYTHON main.py --listen 0.0.0.0 --enable-manager "$@"

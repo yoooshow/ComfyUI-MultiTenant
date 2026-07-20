@@ -161,8 +161,11 @@ def _wrap_prompt_handler(server):
 
         return response
 
-    route.handler = wrapped_post_prompt
-    logger.info("Prompt handler wrapped with billing check")
+    try:
+        route.handler = wrapped_post_prompt
+        logger.info("Prompt handler wrapped with billing check")
+    except Exception:
+        logger.warning("Could not wrap prompt handler (route frozen). Billing via lock script.")
 
 
 async def _billing_poller(server, interval: float = 3.0, timeout: float = 600.0):

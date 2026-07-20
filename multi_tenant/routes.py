@@ -362,13 +362,13 @@ def setup_routes(server):
     @server.routes.get("/api/jobs/workflows")
     async def list_public_workflows(request):
         """List active workflow templates."""
-        templates = await get_workflow_templates(active_only=True)
         return web.json_response([
             {
                 "id": t["id"],
                 "name": t["name"],
                 "display_name": t["display_name"],
                 "description": t["description"],
+                "comfyui_workflow": t.get("comfyui_workflow", {}),
                 "base_cost": t["base_cost"],
                 "cost_per_step": t["cost_per_step"],
                 "cost_per_megapixel": t["cost_per_megapixel"],

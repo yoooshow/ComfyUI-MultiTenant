@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 def setup_routes(server):
     """Register multi-tenant API routes on the PromptServer."""
 
+    endpoints_registered = []
     @server.routes.post("/api/auth/login")
     async def login(request):
         """Authenticate and return a JWT token."""
@@ -200,7 +201,8 @@ def setup_routes(server):
 
         return web.json_response({
             "status": "queued",
-            "prompt_id": prompt_id,
+            "session_id": session_id,
+            "prompt_id": session_id,
             "token_cost": cost,
             "token_balance": user["token_balance"] - cost,
         })
@@ -209,8 +211,7 @@ def setup_routes(server):
 
     async def _require_admin(request):
         """Check that the request is from an admin user."""
-            "session_id": session_id,
-            "prompt_id": session_id,
+        user = await get_user_from_request(request)
         if not user:
             raise web.HTTPUnauthorized(body=json.dumps({"detail": "未登录"}),
                                        content_type="application/json")
@@ -485,21 +486,21 @@ def setup_routes(server):
         try:
             data = await request.json()
         except Exception:
-            return web.json_response([error, Invalid JSON], status=400)
+            return web.json_response({"error": "Invalid JSON"}, status=400)
         session_id = data.get("session_id", "")
         real_prompt_id = data.get("prompt_id", "")
         if not session_id or not real_prompt_id:
-            return web.json_response([error, Missing fields], status=400)
+            return web.json_response({"error": "Missing fields"}, status=400)
         from .auth import get_user_from_request as gur
         user = await gur(request)
         if not user:
-            return web.json_response([error, Unauthorized], status=401)
+            return web.json_response({"error": "Unauthorized"}, status=401)
         from .config import pending_bills as _pb
         if session_id in _pb:
             _pb[real_prompt_id] = _pb.pop(session_id)
-            logger.info(Tracked  + real_prompt_id)
-            return web.json_response([ok, tracked], status=200)
-        return web.json_response([ok, not_found], status=200)
+            logger.info("Tracked " + real_prompt_id)
+            return web.json_response({"status": "tracked"}, status=200)
+        return web.json_response({"status": "not_found"}, status=200)
     endpoints_registered.append("/api/workspace/track-prompt POST")
     server.app.router.add_post("/api/workspace/track-prompt", handle_track_prompt)
 

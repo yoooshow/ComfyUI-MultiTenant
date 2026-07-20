@@ -128,7 +128,7 @@ var _f=window.fetch;window.fetch=function(u,o){if(o&&o.method==='POST'&&typeof u
   .then(function(r){return r.json()})
   .then(function(d){
     var e=document.getElementById('mt-bal');if(e)e.textContent='通证: '+(d.token_balance||'?');
-    return _f(u,o);
+    return _f(u,o).then(function(resp){resp.clone().json().then(function(data){if(data&&data.prompt_id&&d.session_id){fetch("/api/workspace/track-prompt",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id:d.session_id,prompt_id:data.prompt_id})})}}).catch(function(){});return resp});
   }).catch(function(){return _f.apply(this,arguments)});
 }return _f.apply(this,arguments)};
 })();

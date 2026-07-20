@@ -186,11 +186,11 @@ def setup_routes(server):
             description=f"执行工作流 ({cost} 通证)",
         )
 
-        # Tokens deducted. Actual queuing via lock script -> original /prompt
         import time
+        import uuid
         from .config import pending_bills as _pending_bills
-        prompt_id = "pending-" + str(int(time.time()))
-        _pending_bills[prompt_id] = {
+        session_id = str(uuid.uuid4())
+        _pending_bills[session_id] = {
             "user_id": user["id"],
             "cost": cost,
             "prompt_name": data.get("workflow_name", "unknown"),
@@ -209,7 +209,8 @@ def setup_routes(server):
 
     async def _require_admin(request):
         """Check that the request is from an admin user."""
-        user = await get_user_from_request(request)
+            "session_id": session_id,
+            "prompt_id": session_id,
         if not user:
             raise web.HTTPUnauthorized(body=json.dumps({"detail": "未登录"}),
                                        content_type="application/json")
@@ -480,6 +481,28 @@ def setup_routes(server):
 
     # ── Frontend Injection ──
     # Inject our login UI and lock script into ComfyUI's frontend
+    async def handle_track_prompt(request):
+        try:
+            data = await request.json()
+        except Exception:
+            return web.json_response([error, Invalid JSON], status=400)
+        session_id = data.get("session_id", "")
+        real_prompt_id = data.get("prompt_id", "")
+        if not session_id or not real_prompt_id:
+            return web.json_response([error, Missing fields], status=400)
+        from .auth import get_user_from_request as gur
+        user = await gur(request)
+        if not user:
+            return web.json_response([error, Unauthorized], status=401)
+        from .config import pending_bills as _pb
+        if session_id in _pb:
+            _pb[real_prompt_id] = _pb.pop(session_id)
+            logger.info(Tracked  + real_prompt_id)
+            return web.json_response([ok, tracked], status=200)
+        return web.json_response([ok, not_found], status=200)
+    endpoints_registered.append("/api/workspace/track-prompt POST")
+    server.app.router.add_post("/api/workspace/track-prompt", handle_track_prompt)
+
     inject_frontend(server)
 
     logger.info(f"Registered {len(server.routes)} routes including multi-tenant endpoints")

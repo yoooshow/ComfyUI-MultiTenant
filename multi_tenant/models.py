@@ -224,6 +224,10 @@ async def create_workflow_template(name: str, display_name: str, comfyui_workflo
                                     cost_per_step: int = 1, cost_per_megapixel: int = 5) -> Optional[dict]:
     """Create a workflow template."""
     if not _db:
+        from .config import get_db_path
+        path = get_db_path()
+        if path:
+            return create_workflow_template_sync(path, name, display_name, comfyui_workflow, description, base_cost, cost_per_step, cost_per_megapixel)
         return None
     try:
         cursor = await _db.execute(
@@ -240,6 +244,10 @@ async def create_workflow_template(name: str, display_name: str, comfyui_workflo
 async def get_workflow_templates(active_only: bool = True) -> list[dict]:
     """Get workflow templates."""
     if not _db:
+        from .config import get_db_path
+        path = get_db_path()
+        if path:
+            return get_workflow_templates_sync(path, active_only)
         return []
     if active_only:
         cursor = await _db.execute("SELECT * FROM workflow_templates WHERE is_active = 1 ORDER BY display_name")
@@ -358,3 +366,45 @@ def create_user_sync(db_path: str, username: str, password_hash: str, display_na
     except Exception as e:
         conn.close()
         raise
+
+def create_workflow_template_sync(db_path: str, name: str, display_name: str, comfyui_workflow: dict,
+                                    description: str = "", base_cost: int = 10,
+                                    cost_per_step: int = 1, cost_per_megapixel: int = 5) -> Optional[dict]:
+    """Synchronous version of create_workflow_template."""
+    import sqlite3, json
+    conn = sqlite3.connect(db_path)
+    try:
+        cursor = conn.execute(
+            "INSERT INTO workflow_templates (name, display_name, description, comfyui_workflow, base_cost, cost_per_step, cost_per_megapixel) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (name, display_name, description, json.dumps(comfyui_workflow), base_cost, cost_per_step, cost_per_megapixel),
+        )
+        conn.commit()
+        result = {"id": cursor.lastrowid, "name": name, "display_name": display_name}
+        conn.close()
+        return result
+    except Exception as e:
+        conn.close()
+        logging.getLogger(__name__).warning(f"Failed to create workflow template (sync): {e}")
+        return None
+
+
+def get_workflow_templates_sync(db_path: str, active_only: bool = True) -> list[dict]:
+    """Synchronous version of get_workflow_templates."""
+    import sqlite3, json
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    if active_only:
+        cursor = conn.execute("SELECT * FROM workflow_templates WHERE is_active = 1 ORDER BY display_name")
+    else:
+        cursor = conn.execute("SELECT * FROM workflow_templates ORDER BY display_name")
+    rows = cursor.fetchall()
+    conn.close()
+    result = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d["comfyui_workflow"] = json.loads(d["comfyui_workflow"])
+        except (json.JSONDecodeError, TypeError):
+            d["comfyui_workflow"] = {}
+        result.append(d)
+    return result

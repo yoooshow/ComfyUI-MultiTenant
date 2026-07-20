@@ -238,7 +238,7 @@ input:focus{outline:none;border-color:#4f6ef7}
 .badge{display:inline-block;padding:.15rem .5rem;border-radius:20px;font-size:.78rem;font-weight:500}
 .badge-admin{background:#dbeafe;color:#1d4ed8}
 .badge-user{background:#f0f2f5;color:#667085}
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:200;display:none}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);align-items:center;justify-content:center;z-index:200;display:none}
 .modal{background:#fff;border-radius:12px;padding:1.5rem 2rem;width:90%;max-width:520px;max-height:85vh;overflow-y:auto}
 .modal h2{font-size:1.15rem;font-weight:600;margin-bottom:1rem}
 .modal-close{float:right;background:none;border:none;font-size:1.25rem;cursor:pointer;color:#667085;padding:0}
@@ -275,7 +275,7 @@ var token = localStorage.getItem('mt_token');
 
 function toast(msg,type){var d=document.createElement('div');d.className='toast-fixed';d.style.background=type==='error'?'#ef4444':'#10b981';d.textContent=msg;document.body.appendChild(d);setTimeout(function(){d.remove()},3000)}
 function api(m,p,b){return fetch(API_BASE+p,{method:m||'GET',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:b?JSON.stringify(b):null}).then(function(r){if(r.status===401){location.href='/'}if(r.status===204)return null;return r.json()})}
-function showModal(html){document.getElementById('modal-body').innerHTML=html;document.getElementById('modal').style.display=''}
+function showModal(html){document.getElementById('modal-body').innerHTML=html;document.getElementById('modal').style.display='flex'}
 function hideModal(){document.getElementById('modal').style.display='none'}
 function switchTab(tab){document.querySelectorAll('.tab').forEach(function(t){t.classList.toggle('active',t.dataset.tab===tab)});renderTab(tab)}
 

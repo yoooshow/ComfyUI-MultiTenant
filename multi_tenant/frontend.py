@@ -419,7 +419,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Noto San
 <button id=\"logout\" class=\"btn btn-sm btn-outline\">\u9000\u51fa</button>
 </div></div>
 <div class=\"container\"><div id=\"content\" class=\"loading\">\u52a0\u8f7d\u4e2d...</div></div>
-<script>
+<script>(function(){
+
 var T=localStorage.getItem(\'mt_token\');
 if(!T){location.href=\"/\";return}
 function fetchJSON(url){return fetch(url,{headers:{\"Authorization\":\"Bearer \"+T}}).then(function(r){return r.json()})}
@@ -446,6 +447,7 @@ fetchJSON(\'/api/jobs/workflows\').then(function(wfs){
 });
 document.getElementById(\'admin\').onclick=function(){location.href=\"/admin\"};
 document.getElementById(\'logout\').onclick=function(){localStorage.removeItem(\'mt_token\');location.href=\"/\"};
+})();
 </script>
 </body>
 </html>"""

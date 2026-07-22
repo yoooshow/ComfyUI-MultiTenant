@@ -163,7 +163,8 @@ def inject_frontend(server):
             )
             
             if "</head>" in html:
-                html = html.replace("</head>", f"{token_script}\n</head>")
+                hide_splash = '<style>#splash-loader{display:none!important}</style>\n'
+                html = html.replace("</head>", f"{hide_splash}{token_script}\n</head>")
             if "</body>" in html:
                 html = html.replace("</body>", f"{wf_loader}\n{lock_script}\n</body>")
             return web.Response(text=html, content_type="text/html")

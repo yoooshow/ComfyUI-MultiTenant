@@ -90,7 +90,7 @@ def setup_routes(server):
         return web.json_response({
             "id": user["id"],
             "username": user["username"],
-            "message": "注册成功，请等待管理员分配通证后登录"
+            "message": "注册成功，请等待管理员分配Token后登录"
         }, status=201)
 
     @server.routes.get("/api/auth/me")
@@ -166,7 +166,7 @@ def setup_routes(server):
 
         if user["token_balance"] < cost:
             return web.json_response({
-                "detail": f"通证不足 (需要 {cost}, 当前 {user['token_balance']})"
+                "detail": f"Token不足 (需要 {cost}, 当前 {user['token_balance']})"
             }, status=402)
 
         # Deduct tokens
@@ -177,7 +177,7 @@ def setup_routes(server):
             balance_after=user["token_balance"] - cost,
             transaction_type="deduction_hold",
             reference_id="execute_api",
-            description=f"执行工作流 ({cost} 通证)",
+            description=f"执行工作流 ({cost} Token)",
         )
 
         import time

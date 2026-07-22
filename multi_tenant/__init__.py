@@ -131,7 +131,7 @@ def _wrap_prompt_handler(server):
 
         if user["token_balance"] < cost:
             return web.json_response({
-                "error": f"通证不足 (需要 {cost}, 当前 {user['token_balance']})"
+                "error": f"Token不足 (需要 {cost}, 当前 {user['token_balance']})"
             }, status=402)
 
         user_id = user["id"]
@@ -211,7 +211,7 @@ async def _billing_poller(server, interval: float = 3.0, timeout: float = 600.0)
                     await create_transaction(
                         user_id=user_id, amount=0, balance_after=0,
                         transaction_type="deduction", reference_id=prompt_id,
-                        description=f"完成: {info['prompt_name']} ({cost} 通证)",
+                        description=f"完成: {info['prompt_name']} ({cost} Token)",
                     )
                 else:
                     await update_user_balance(user_id, cost)

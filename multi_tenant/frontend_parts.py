@@ -8,78 +8,8 @@ from aiohttp import web
 
 logger = logging.getLogger(__name__)
 
-
-
 # ── Static HTML for the login page (served when no valid auth token) ──
 _LOGIN_PAGE = """<!DOCTYPE html>
-<html lang="zh-CN"><head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>ComfyUI</title><style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans SC",sans-serif;min-height:100vh;background:linear-gradient(135deg,#0f0f13 0%,#1a1d23 40%,#25262b 100%);display:flex;align-items:center;justify-content:center;overflow:hidden}
-.bg-grid{position:fixed;inset:0;background-image:linear-gradient(rgba(255,255,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.03) 1px,transparent 1px);background-size:60px 60px;z-index:0}
-.bg-glow{position:fixed;inset:0;background:radial-gradient(ellipse 600px 400px at 50% 40%,rgba(79,110,247,0.12) 0%,transparent 70%);z-index:0}
-.overlay{position:fixed;inset:0;z-index:1;background:rgba(0,0,0,0.55);backdrop-filter:blur(8px)}
-.login-card{position:relative;z-index:2;width:100%;max-width:420px;padding:40px 36px 32px;background:#1c1e24;border:1px solid rgba(255,255,255,0.08);border-radius:16px;box-shadow:0 24px 80px rgba(0,0,0,0.5)}
-.login-card h1{text-align:center;font-size:22px;font-weight:700;color:#fff;margin-bottom:4px}
-.login-card .sub{text-align:center;color:#667085;font-size:13px;margin-bottom:28px}
-.tab-bar{display:flex;margin-bottom:24px;border-bottom:1px solid rgba(255,255,255,0.08)}
-.tab-btn{flex:1;padding:10px;text-align:center;font-size:14px;font-weight:500;color:#667085;cursor:pointer;border-bottom:2px solid transparent;transition:all 0.15s;background:none;border:none}
-.tab-btn:hover{color:#c4c7d0}.tab-btn.active{color:#4f6ef7;border-bottom-color:#4f6ef7}
-.form-group{margin-bottom:16px}
-.form-group label{display:block;font-size:13px;font-weight:500;color:#c4c7d0;margin-bottom:6px}
-.form-group input{width:100%;padding:10px 14px;border:1px solid rgba(255,255,255,0.1);border-radius:8px;background:#141518;color:#fff;font-size:14px;outline:none}
-.form-group input:focus{border-color:#4f6ef7}
-.form-group input::placeholder{color:#4a4d57}
-.submit-btn{width:100%;padding:11px;margin-top:4px;background:linear-gradient(135deg,#4f6ef7 0%,#6c5ce7 100%);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer}
-.submit-btn:hover{opacity:0.9}.submit-btn:disabled{opacity:0.5;cursor:not-allowed}
-.error-msg{color:#ef4444;font-size:13px;margin-top:8px;display:none;text-align:center}
-.form-panel{display:none}.form-panel.active{display:block}
-.footer-text{text-align:center;margin-top:20px;font-size:13px;color:#4a4d57}
-</style></head><body>
-<div class="bg-grid"></div><div class="bg-glow"></div><div class="overlay"></div>
-<div class="login-card">
-<h1>ComfyUI</h1><p class="sub">登录以使用工作台</p>
-<div class="tab-bar"><button class="tab-btn active" data-tab="login" onclick="switchTab('login')">登录</button><button class="tab-btn" data-tab="register" onclick="switchTab('register')">注册</button></div>
-<div id="panel-login" class="form-panel active">
-<div class="form-group"><label>用户名</label><input id="mt-u" placeholder="输入用户名" autocomplete="username"></div>
-<div class="form-group"><label>密码</label><input id="mt-p" type="password" placeholder="输入密码" autocomplete="current-password"></div>
-<button class="submit-btn" id="mt-btn" onclick="doLogin()">登录</button><div id="mt-err" class="error-msg"></div></div>
-<div id="panel-register" class="form-panel">
-<div class="form-group"><label>用户名</label><input id="reg-u" placeholder="输入用户名" autocomplete="username"></div>
-<div class="form-group"><label>邮箱</label><input id="reg-e" type="email" placeholder="输入邮箱" autocomplete="email"></div>
-<div class="form-group"><label>密码</label><input id="reg-p" type="password" placeholder="输入密码" autocomplete="new-password"></div>
-<div class="form-group"><label>显示名称</label><input id="reg-d" placeholder="显示名称（可选）"></div>
-<button class="submit-btn" id="reg-btn" onclick="doRegister()">注册</button><div id="reg-err" class="error-msg"></div></div>
-<div class="footer-text">未注册用户将自动创建账号</div></div>
-<script>
-function switchTab(t){document.querySelectorAll(".tab-btn").forEach(function(b){b.classList.toggle("active",b.dataset.tab===t)});document.querySelectorAll(".form-panel").forEach(function(p){p.classList.toggle("active",p.id==="panel-"+t)})}
-function doLogin(){var u=document.getElementById("mt-u").value,p=document.getElementById("mt-p").value,btn=document.getElementById("mt-btn"),err=document.getElementById("mt-err");btn.disabled=true;btn.textContent="登录中...";fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:u,password:p})}).then(function(r){return r.json()}).then(function(d){if(d.access_token){localStorage.setItem("mt_token",d.access_token);window.location.href="/?"+new URLSearchParams({token:d.access_token})}else{err.textContent=d.detail||"登录失败";err.style.display="";btn.disabled=false;btn.textContent="登录"}}).catch(function(){err.textContent="网络错误";err.style.display="";btn.disabled=false;btn.textContent="登录"})}
-function doRegister(){var u=document.getElementById("reg-u").value,e=document.getElementById("reg-e").value,p=document.getElementById("reg-p").value,d=document.getElementById("reg-d").value,btn=document.getElementById("reg-btn"),err=document.getElementById("reg-err");if(!u||!p){err.textContent="请填写用户名和密码";err.style.display="";return}btn.disabled=true;btn.textContent="注册中...";fetch("/api/auth/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:u,email:e||u+"@user",password:p,display_name:d||u})}).then(function(r){return r.json()}).then(function(d){if(d.access_token){localStorage.setItem("mt_token",d.access_token);window.location.href="/?"+new URLSearchParams({token:d.access_token})}else{err.textContent=d.detail||"注册失败";err.style.display="";btn.disabled=false;btn.textContent="注册"}}).catch(function(){err.textContent="网络错误";err.style.display="";btn.disabled=false;btn.textContent="注册"})}
-document.getElementById("mt-u").addEventListener("keydown",function(e){if(e.key==="Enter")document.getElementById("mt-p").focus()});
-document.getElementById("mt-p").addEventListener("keydown",function(e){if(e.key==="Enter")doLogin()});
-document.getElementById("mt-u").focus();
-</script></body></html>"""
-
-
-# ── Lock/Billing JS injected into ComfyUI for authenticated users ──
-_LOCK_JS = """
-(function(){var mt=localStorage.getItem("mt_token");if(!mt)return;var t=mt;var wn=(new URLSearchParams(location.search)).get("workflow")||localStorage.getItem("mt_wf")||"";
-var wl=[];fetch("/api/jobs/workflows",{headers:{"Authorization":"Bearer "+mt}}).then(function(r){return r.json()}).then(function(l){wl=l;l.forEach(function(w){var o=document.createElement("option");o.value=w.name;o.textContent=w.display_name||w.name;if(w.name===wn)o.selected=true;document.getElementById("mt-ws").appendChild(o)});if(!wn&&l.length>0){wn=l[0].name;document.getElementById("mt-ws").value=wn;localStorage.setItem("mt_wf",wn);document.getElementById("mt-wn").textContent=wn;lw(wn)}}).catch(function(){});
-fetch("/api/auth/me",{headers:{"Authorization":"Bearer "+mt}}).then(function(r){return r.json()}).then(function(u){if(u.is_admin){document.getElementById("mt-la").style.display=""}else{var c="[class*=sidebar],[class*=Sidebar],[class*=node-browser],[class*=NodeBrowser],[class*=node-palette],[class*=NodePalette],[class*=search-bar],[class*=manager],[class*=Manager],[class*=node-manager],[class*=NodeManager],[data-testid*=setting],[class*=console],[class*=Console]";c+="{display:none!important}";var s=document.createElement("style");s.textContent=c;document.head.appendChild(s)}}).catch(function(){});
-var n=document.createElement("div");n.id="mt-nav";n.style.cssText="position:fixed;top:0;left:0;right:0;z-index:99999;height:48px;display:flex;align-items:center;padding:0 16px;background:rgba(26,29,35,0.96);backdrop-filter:blur(8px);border-bottom:1px solid rgba(255,255,255,0.06)";n.innerHTML="<div style=\"display:flex;align-items:center;gap:16px;flex:1\"><span style=\"font-weight:700;font-size:15px;color:#fff\">ComfyUI</span><select id=\"mt-ws\" style=\"padding:5px 28px 5px 10px;border:1px solid rgba(255,255,255,0.1);border-radius:6px;background:#141518;color:#fff;font-size:13px;cursor:pointer;outline:none;max-width:260px\"><option value=\"\">载入工作流...</option></select></div><div style=\"display:flex;align-items:center;gap:10px\"><span style=\"color:#667085;font-size:13px\" id=\"mt-nb\">通证: --</span><a id=\"mt-la\" href=\"/admin?token="+encodeURIComponent(mt)+"\" style=\"display:none;color:#4f6ef7;font-size:13px;text-decoration:none\">管理</a><a href=\"/\" onclick=\"localStorage.removeItem(\\'mt_token\\')\" style=\"color:#667085;font-size:13px;text-decoration:none;padding:4px 10px;border-radius:4px;border:1px solid rgba(255,255,255,0.1)\">退出</a></div>";document.body.appendChild(n);
-var h=document.createElement("div");h.style.cssText="position:fixed;top:48px;left:0;right:0;z-index:99998;height:44px;display:flex;align-items:center;padding:0 16px;background:rgba(30,32,38,0.95);backdrop-filter:blur(8px);border-bottom:1px solid rgba(255,255,255,0.06)";h.innerHTML="<div style=\"display:flex;align-items:center;gap:10px;flex:1\"><span style=\"color:#c4c7d0;font-size:13px;font-weight:500\" id=\"mt-wn\">"+wn+"</span></div><div style=\"display:flex;align-items:center;gap:10px\"><button id=\"mt-rb\" style=\"padding:6px 20px;background:linear-gradient(135deg,#4f6ef7,#6c5ce7);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M8 5v14l11-7z\"/></svg>开始生图</button></div>";document.body.appendChild(h);
-var p=document.createElement("style");p.textContent="body.litegraph{padding-top:92px!important}";document.head.appendChild(p);
-document.getElementById("mt-ws").addEventListener("change",function(){wn=this.value;localStorage.setItem("mt_wf",wn);document.getElementById("mt-wn").textContent=wn;lw(wn)});
-function lw(n){var t=wl.find(function(w){return w.name===n});if(!t||!t.comfyui_workflow)return;var w=t.comfyui_workflow;(function tl(){if(!window.app||!window.app.graph)return setTimeout(tl,500);var ia=w&&typeof w==="object"&&!w.nodes&&Object.keys(w).some(function(k){return /^\d+$/.test(k)&&w[k]&&w[k].class_type});try{if(ia&&typeof window.app.loadApiJson==="function"){window.app.loadApiJson(w);return}if(typeof window.app.loadGraphData==="function"){window.app.loadGraphData(w);return}if(window.app.graph)window.app.graph.configure(w)}catch(e){setTimeout(tl,1000)}})()}
-document.getElementById("mt-rb").addEventListener("click",function(){var b=this;b.disabled=true;b.innerHTML="<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M12 6v6l4 2\"/></svg>生成中...";if(window.app&&window.app.queuePrompt){window.app.queuePrompt().then(function(){b.disabled=false;b.innerHTML="<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M8 5v14l11-7z\"/></svg>开始生图"}).catch(function(){b.disabled=false;b.innerHTML="<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M8 5v14l11-7z\"/></svg>开始生图"})}else{b.disabled=false;b.innerHTML="<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M8 5v14l11-7z\"/></svg>开始生图"}});
-(function ub(){fetch("/api/users/me/balance",{headers:{"Authorization":"Bearer "+mt}}).then(function(r){return r.json()}).then(function(d){document.getElementById("mt-nb").textContent="\u901a\u8bc1: "+d.token_balance})})();
-setInterval(function(){fetch("/api/users/me/balance",{headers:{"Authorization":"Bearer "+mt}}).then(function(r){return r.json()}).then(function(d){document.getElementById("mt-nb").textContent="\u901a\u8bc1: "+d.token_balance})},30000);
-var _f=window.fetch;window.fetch=function(u,o){if(o&&o.method==="POST"&&typeof u==="string"&&(u.indexOf("/prompt")>=0||u.indexOf("/queue")>=0)){var b;try{b=JSON.parse(o.body)}catch(e){return _f.apply(this,arguments)}var t=localStorage.getItem("mt_token");if(!t){return new Response("{}",{status:401})}return fetch("/api/workspace/execute",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+t},body:JSON.stringify({workflow_name:wn||"unknown",workflow_data:b.prompt||b})}).then(function(r){return r.json()}).then(function(d){var be=document.getElementById("mt-nb");if(be)be.textContent="\u901a\u8bc1: "+d.token_balance;return _f(u,o).then(function(resp){resp.clone().json().then(function(data){if(data&&data.prompt_id&&d.session_id) fetch("/api/workspace/track-prompt",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id:d.session_id,prompt_id:data.prompt_id})})}).catch(function(){});return resp})}).catch(function(){return _f.apply(this,arguments)})}return _f.apply(this,arguments)};
-})();
-"""
-
-
 def inject_frontend(server):
     """Register route handlers for frontend auth + lock script injection."""
     web_root = getattr(server, 'web_root', None)
@@ -105,8 +35,32 @@ def inject_frontend(server):
                 if workflow:
                     return await _serve_comfyui(request, token, payload, web_root, workflow)
                 else:
-                    # No specific workflow - let lock script auto-select first
-                    return await _serve_comfyui(request, token, payload, web_root, "")
+                    from .models import get_workflow_templates, get_user
+                    uid = payload.get("user_id")
+                    user = await get_user(id=uid) if uid else None
+                    bal = user["token_balance"] if user else 0
+                    templates = await get_workflow_templates(active_only=True)
+                    cards = ""
+                    if templates:
+                        bg_colors = ["#eef2ff","#f0fdf4","#fff7ed","#fdf2f8","#f0f9ff"]
+                        for i, t in enumerate(templates):
+                            bg = bg_colors[i % 5]
+                            name = t.get("display_name", t["name"])
+                            desc = (t.get("description") or t["name"]).replace('"', "")
+                            cards += '<a class="card" href="/?workflow=' + t["name"] + '&token=' + token + '" style="background:' + bg + '"><div class="name">' + name + '</div><div class="desc">' + desc + '</div></a>\n'
+                    else:
+                        cards = '<div class="empty">\u6682\u65e0\u53ef\u7528\u7684\u5de5\u4f5c\u6d41<br><a href="/admin?token=' + token + '" class="btn btn-primary btn-sm" style="margin-top:12px">\u7ba1\u7406\u540e\u53f0</a></div>'
+                    html = _LANDING_PAGE
+                    html = html.replace("_BALANCE_", str(bal))
+                    html = html.replace("_ADMIN_URL_", "/admin?token=" + token); html = html.replace('href="/admin"', 'href="/admin?token=' + token + '"')
+                    html = html.replace("_CARDS_", cards)
+                    idx = html.find("</head>")
+                    if idx > 0:
+                        ts = '<script>localStorage.setItem("mt_token","' + token + '");'
+                        ts += 'if(location.search.includes("token="))'
+                        ts += 'history.replaceState({},"",location.pathname)</script>\n'
+                        html = html[:idx] + ts + html[idx:]
+                    return web.Response(text=html, content_type="text/html")
 
         # No valid token — serve login page
         html = _LOGIN_PAGE
@@ -185,8 +139,6 @@ def inject_frontend(server):
         logger.error(f'Admin panel setup error: {e}')
 
 # ── Admin Panel HTML (served at /admin) ──
-
-
 _ADMIN_PAGE = """<!DOCTYPE html>
 <html lang="zh-CN">
 <head>

@@ -39,7 +39,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans S
 </style></head><body>
 <div class="bg-grid"></div><div class="bg-glow"></div><div class="overlay"></div>
 <div class="login-card">
-<h1>ComfyUI</h1><p class="sub">登录以使用工作台</p>
+<h1>Z&A UI</h1><p class="sub">登录以使用工作台</p>
 <div class="tab-bar"><button class="tab-btn active" data-tab="login" onclick="switchTab('login')">登录</button><button class="tab-btn" data-tab="register" onclick="switchTab('register')">注册</button></div>
 <div id="panel-login" class="form-panel active">
 <div class="form-group"><label>用户名</label><input id="mt-u" placeholder="输入用户名" autocomplete="username"></div>
@@ -55,7 +55,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans S
 <script>
 function switchTab(t){document.querySelectorAll(".tab-btn").forEach(function(b){b.classList.toggle("active",b.dataset.tab===t)});document.querySelectorAll(".form-panel").forEach(function(p){p.classList.toggle("active",p.id==="panel-"+t)})}
 function doLogin(){var u=document.getElementById("mt-u").value,p=document.getElementById("mt-p").value,btn=document.getElementById("mt-btn"),err=document.getElementById("mt-err");btn.disabled=true;btn.textContent="登录中...";fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:u,password:p})}).then(function(r){return r.json()}).then(function(d){if(d.access_token){localStorage.setItem("mt_token",d.access_token);window.location.href="/?"+new URLSearchParams({token:d.access_token})}else{err.textContent=d.detail||"登录失败";err.style.display="";btn.disabled=false;btn.textContent="登录"}}).catch(function(){err.textContent="网络错误";err.style.display="";btn.disabled=false;btn.textContent="登录"})}
-function doRegister(){var u=document.getElementById("reg-u").value,e=document.getElementById("reg-e").value,p=document.getElementById("reg-p").value,d=document.getElementById("reg-d").value,btn=document.getElementById("reg-btn"),err=document.getElementById("reg-err");if(!u||!p){err.textContent="请填写用户名和密码";err.style.display="";return}btn.disabled=true;btn.textContent="注册中...";fetch("/api/auth/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:u,email:e||u+"@user",password:p,display_name:d||u})}).then(function(r){return r.json()}).then(function(d){if(d.access_token){localStorage.setItem("mt_token",d.access_token);window.location.href="/?"+new URLSearchParams({token:d.access_token})}else{err.textContent=d.detail||"注册失败";err.style.display="";btn.disabled=false;btn.textContent="注册"}}).catch(function(){err.textContent="网络错误";err.style.display="";btn.disabled=false;btn.textContent="注册"})}
+function doRegister(){var u=document.getElementById("reg-u").value,e=document.getElementById("reg-e").value,p=document.getElementById("reg-p").value,d=document.getElementById("reg-d").value,btn=document.getElementById("reg-btn"),err=document.getElementById("reg-err");if(!u||!p){err.textContent="请填写用户名和密码";err.style.display="";return}btn.disabled=true;btn.textContent="注册中...";fetch("/api/auth/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:u,email:e||u+"@user",password:p,display_name:d||u})}).then(function(r){return r.json()}).then(function(d){if(d.id){err.textContent=d.message||"注册成功，请等待管理员分配通证";err.style.display="";err.style.color="#10b981";btn.disabled=false;btn.textContent="注册"}else{err.textContent=d.detail||"注册失败";err.style.display="";btn.disabled=false;btn.textContent="注册"}}).catch(function(){err.textContent="网络错误";err.style.display="";btn.disabled=false;btn.textContent="注册"})}
 document.getElementById("mt-u").addEventListener("keydown",function(e){if(e.key==="Enter")document.getElementById("mt-p").focus()});
 document.getElementById("mt-p").addEventListener("keydown",function(e){if(e.key==="Enter")doLogin()});
 document.getElementById("mt-u").focus();
@@ -192,7 +192,7 @@ _ADMIN_PAGE = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ComfyUI 管理后台</title>
+<title>Z&A UI 管理后台</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans SC",sans-serif;background:#f5f6fa;color:#1a1d23;min-height:100vh}

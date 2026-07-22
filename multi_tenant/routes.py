@@ -87,17 +87,10 @@ def setup_routes(server):
         if not user:
             return web.json_response({"detail": "注册失败"}, status=500)
 
-        token = create_token(user["id"], user["username"])
         return web.json_response({
-            "access_token": token,
-            "token_type": "bearer",
-            "user": {
-                "id": user["id"],
-                "username": user["username"],
-                "display_name": user["display_name"],
-                "token_balance": user["token_balance"],
-                "is_admin": bool(user["is_admin"]),
-            },
+            "id": user["id"],
+            "username": user["username"],
+            "message": "注册成功，请等待管理员分配通证后登录"
         }, status=201)
 
     @server.routes.get("/api/auth/me")

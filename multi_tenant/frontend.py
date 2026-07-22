@@ -14,89 +14,62 @@ _LOGIN_PAGE = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ComfyUI 多租户</title>
+<title>ComfyUI</title>
 <style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", sans-serif; background: #1a1d23; color: #fff; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
-.login-container { text-align: center; width: 100%; max-width: 380px; padding: 20px; }
-h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 4px; }
-h1 span { font-weight: 400; opacity: 0.5; }
-.subtitle { color: #667085; font-size: 14px; margin-bottom: 28px; }
-.form-card { background: #25262b; padding: 28px; border-radius: 12px; text-align: left; }
-input { width: 100%; padding: 10px 14px; margin-bottom: 12px; border: 1px solid #373a40; border-radius: 6px; background: #1a1d23; color: #fff; font-size: 14px; outline: none; }
-input:focus { border-color: #4f6ef7; }
-button { width: 100%; padding: 10px; background: #4f6ef7; color: #fff; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; }
-button:hover { background: #3d5bd9; }
-button:disabled { opacity: 0.6; cursor: not-allowed; }
-.error { color: #ef4444; font-size: 13px; margin-top: 8px; display: none; }
-.hint { color: #667085; font-size: 12px; margin-top: 12px; text-align: center; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans SC",sans-serif;min-height:100vh;background:linear-gradient(135deg,#0f0f13 0%,#1a1d23 40%,#25262b 100%);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.bg-grid{position:fixed;inset:0;background-image:linear-gradient(rgba(255,255,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.03) 1px,transparent 1px);background-size:60px 60px;z-index:0}
+.bg-glow{position:fixed;inset:0;background:radial-gradient(ellipse 600px 400px at 50% 40%,rgba(79,110,247,0.12) 0%,transparent 70%);z-index:0}
+.overlay{position:fixed;inset:0;z-index:1;background:rgba(0,0,0,0.55);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.login-card{position:relative;z-index:2;width:100%;max-width:420px;padding:40px 36px 32px;background:#1c1e24;border:1px solid rgba(255,255,255,0.08);border-radius:16px;box-shadow:0 24px 80px rgba(0,0,0,0.5)}
+.login-card h1{text-align:center;font-size:22px;font-weight:700;color:#fff;margin-bottom:4px}
+.login-card .sub{text-align:center;color:#667085;font-size:13px;margin-bottom:28px}
+.tab-bar{display:flex;margin-bottom:24px;border-bottom:1px solid rgba(255,255,255,0.08)}
+.tab-btn{flex:1;padding:10px;text-align:center;font-size:14px;font-weight:500;color:#667085;cursor:pointer;border-bottom:2px solid transparent;transition:all 0.15s;background:none;border-top:none;border-left:none;border-right:none}
+.tab-btn:hover{color:#c4c7d0}
+.tab-btn.active{color:#4f6ef7;border-bottom-color:#4f6ef7}
+.form-group{margin-bottom:16px}
+.form-group label{display:block;font-size:13px;font-weight:500;color:#c4c7d0;margin-bottom:6px}
+.form-group input{width:100%;padding:10px 14px;border:1px solid rgba(255,255,255,0.1);border-radius:8px;background:#141518;color:#fff;font-size:14px;outline:none;transition:border-color 0.15s}
+.form-group input:focus{border-color:#4f6ef7}
+.form-group input::placeholder{color:#4a4d57}
+.submit-btn{width:100%;padding:11px;margin-top:4px;background:linear-gradient(135deg,#4f6ef7 0%,#6c5ce7 100%);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:opacity 0.15s}
+.submit-btn:hover{opacity:0.9}
+.submit-btn:disabled{opacity:0.5;cursor:not-allowed}
+.error-msg{color:#ef4444;font-size:13px;margin-top:8px;display:none;text-align:center}
+.form-panel{display:none}
+.form-panel.active{display:block}
+.footer-text{text-align:center;margin-top:20px;font-size:13px;color:#4a4d57}
+.footer-text a{color:#4f6ef7;text-decoration:none;cursor:pointer}
 </style>
 </head>
 <body>
-<div class="login-container">
-  <h1>ComfyUI <span>多租户</span></h1>
-  <p class="subtitle">请登录以使用工作台</p>
-  <div class="form-card">
-    <input id="mt-u" placeholder="用户名" autocomplete="username">
-    <input id="mt-p" type="password" placeholder="密码" autocomplete="current-password">
-    <button id="mt-btn" onclick="doLogin()">登录</button>
-    <div id="mt-err" class="error"></div>
-    <p class="hint"><a href="#" id="toggle-reg" style="color:#4f6ef7;text-decoration:none;font-size:13px">没有账号？注册</a></p>
-  </div>
-  <div class="form-card" id="register-form" style="display:none">
-    <input id="reg-u" placeholder="用户名" autocomplete="username">
-    <input id="reg-e" placeholder="邮箱" autocomplete="email">
-    <input id="reg-p" type="password" placeholder="密码" autocomplete="new-password">
-    <input id="reg-d" placeholder="显示名称(可选)">
-    <button id="reg-btn" onclick="doRegister()">注册</button>
-    <div id="reg-err" class="error"></div>
-    <p class="hint"><a href="#" id="toggle-reg-back" style="color:#4f6ef7;text-decoration:none;font-size:13px">已有账号？登录</a></p>
-  </div>
+<div class="bg-grid"></div><div class="bg-glow"></div><div class="overlay"></div>
+<div class="login-card">
+<h1>ComfyUI</h1><p class="sub">登录以使用工作台</p>
+<div class="tab-bar"><button class="tab-btn active" data-tab="login" onclick="switchTab('login')">登录</button><button class="tab-btn" data-tab="register" onclick="switchTab('register')">注册</button></div>
+<div id="panel-login" class="form-panel active">
+<div class="form-group"><label>用户名</label><input id="mt-u" placeholder="输入用户名" autocomplete="username"></div>
+<div class="form-group"><label>密码</label><input id="mt-p" type="password" placeholder="输入密码" autocomplete="current-password"></div>
+<button class="submit-btn" id="mt-btn" onclick="doLogin()">登录</button>
+<div id="mt-err" class="error-msg"></div>
+</div>
+<div id="panel-register" class="form-panel">
+<div class="form-group"><label>用户名</label><input id="reg-u" placeholder="输入用户名" autocomplete="username"></div>
+<div class="form-group"><label>邮箱</label><input id="reg-e" type="email" placeholder="输入邮箱" autocomplete="email"></div>
+<div class="form-group"><label>密码</label><input id="reg-p" type="password" placeholder="输入密码" autocomplete="new-password"></div>
+<div class="form-group"><label>显示名称</label><input id="reg-d" placeholder="显示名称（可选）"></div>
+<button class="submit-btn" id="reg-btn" onclick="doRegister()">注册</button>
+<div id="reg-err" class="error-msg"></div>
+</div>
+<div class="footer-text">未注册用户将自动创建账号</div>
 </div>
 <script>
-function toggleRegister(){
-  var l=document.getElementById("login-form");l.style.display="none";
-  document.getElementById("register-form").style.display=""
-}
-function doRegister(){
-  var u=document.getElementById("reg-u").value;
-  var e=document.getElementById("reg-e").value;
-  var p=document.getElementById("reg-p").value;
-  var d=document.getElementById("reg-d").value;
-  if(!u||!p){document.getElementById("reg-err").textContent="请填写用户名和密码";document.getElementById("reg-err").style.display="";return}
-  document.getElementById("reg-btn").disabled=true;
-  fetch("/api/auth/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:u,email:e||u+"@local",password:p,display_name:d||u})})
-  .then(function(r){return r.json()}).then(function(d){
-    if(d.access_token){localStorage.setItem("mt_token",d.access_token);window.location.href="/?token="+encodeURIComponent(d.access_token)}
-    else{document.getElementById("reg-err").textContent=d.detail||"注册失败";document.getElementById("reg-err").style.display="";document.getElementById("reg-btn").disabled=false}
-  }).catch(function(){document.getElementById("reg-err").textContent="网络错误";document.getElementById("reg-err").style.display="";document.getElementById("reg-btn").disabled=false});
-}
-function doLogin(){
-  var u=document.getElementById('mt-u').value;
-  var p=document.getElementById('mt-p').value;
-  var btn=document.getElementById('mt-btn');
-  var err=document.getElementById('mt-err');
-  btn.disabled=true; btn.textContent='登录中...';
-  fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})})
-  .then(function(r){return r.json()})
-  .then(function(d){
-    if(d.access_token){
-      localStorage.setItem('mt_token',d.access_token);
-      window.location.href='/?'+new URLSearchParams({token:d.access_token});
-    } else {
-      err.textContent=d.detail||'登录失败';
-      err.style.display='';
-      btn.disabled=false; btn.textContent='登录';
-    }
-  })
-  .catch(function(e){
-    err.textContent='网络错误: '+e.message;
-    err.style.display='';
-    btn.disabled=false; btn.textContent='登录';
-  });
-}
-document.getElementById('mt-u').addEventListener('keydown',function(e){if(e.key==='Enter'){document.getElementById('mt-p').focus()}});
-document.getElementById('mt-p').addEventListener('keydown',function(e){if(e.key==='Enter'){doLogin()}});
+function switchTab(t){document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.toggle('active',b.dataset.tab===t)});document.querySelectorAll('.form-panel').forEach(function(p){p.classList.toggle('active',p.id==='panel-'+t)})}
+function doLogin(){var u=document.getElementById('mt-u').value,p=document.getElementById('mt-p').value,btn=document.getElementById('mt-btn'),err=document.getElementById('mt-err');btn.disabled=true;btn.textContent='登录中...';fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})}).then(function(r){return r.json()}).then(function(d){if(d.access_token){localStorage.setItem('mt_token',d.access_token);window.location.href='/?'+new URLSearchParams({token:d.access_token})}else{err.textContent=d.detail||'登录失败';err.style.display='';btn.disabled=false;btn.textContent='登录'}}).catch(function(){err.textContent='网络错误';err.style.display='';btn.disabled=false;btn.textContent='登录'})}
+function doRegister(){var u=document.getElementById('reg-u').value,e=document.getElementById('reg-e').value,p=document.getElementById('reg-p').value,d=document.getElementById('reg-d').value,btn=document.getElementById('reg-btn'),err=document.getElementById('reg-err');if(!u||!p){err.textContent='请填写用户名和密码';err.style.display='';return}btn.disabled=true;btn.textContent='注册中...';fetch('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,email:e||u+'@user',password:p,display_name:d||u})}).then(function(r){return r.json()}).then(function(d){if(d.access_token){localStorage.setItem('mt_token',d.access_token);window.location.href='/?'+new URLSearchParams({token:d.access_token})}else{err.textContent=d.detail||'注册失败';err.style.display='';btn.disabled=false;btn.textContent='注册'}}).catch(function(){err.textContent='网络错误';err.style.display='';btn.disabled=false;btn.textContent='注册'})}
+document.getElementById('mt-u').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('mt-p').focus()});
+document.getElementById('mt-p').addEventListener('keydown',function(e){if(e.key==='Enter')doLogin()});
 document.getElementById('mt-u').focus();
 </script>
 </body>
@@ -105,164 +78,83 @@ document.getElementById('mt-u').focus();
 # ── Lock/Billing JS injected into ComfyUI for authenticated users ──
 _LOCK_JS = """
 (function(){
-var mt=localStorage.getItem('mt_token');
+var mt=localStorage.getItem("mt_token");
 if(!mt) return;
-var WF_NAME=(new URLSearchParams(location.search)).get('workflow')||'';
-fetch('/api/users/me/balance',{headers:{'Authorization':'Bearer '+mt}}).then(function(r){return r.json()}).then(function(d){
-  var e=document.getElementById('mt-bal');if(e)e.textContent='\\u901a\\u8bc1: '+(d.token_balance||0);
+var token=mt;
+var wfName=(new URLSearchParams(location.search)).get("workflow")||localStorage.getItem("mt_wf")||"";
+
+// Fetch user info
+fetch("/api/auth/me",{headers:{"Authorization":"Bearer "+mt}}).then(function(r){return r.json()}).then(function(u){
+  window.__mt_user=u;
+  if(u.is_admin) return;
+  // Hide sidebar, node browser, manager, settings, toolbar, console for regular users
+  var css="";
+  css+= '[class*="sidebar"],[class*="Sidebar"],[class*="node-browser"],[class*="NodeBrowser"]';
+  css+= ',[class*="node-palette"],[class*="NodePalette"],[class*="search-bar"]';
+  css+= ',[class*="manager"],[class*="Manager"],[class*="node-manager"],[class*="NodeManager"]';
+  css+= ',[class*="setting"],[class*="Setting"],[data-testid*="setting"]';
+  css+= ',[class*="console"],[class*="Console"],[class*="shortcut"],[class*="Shortcut"]';
+  css+= ',[class*="queue-button"],[class*="QueueButton"]';
+  css+= '{display:none!important}';
+  var s=document.createElement("style");s.textContent=css;
+  document.head.appendChild(s);
 }).catch(function(){});
-fetch('/api/auth/me',{headers:{'Authorization':'Bearer '+mt}}).then(function(r){return r.json()}).then(function(u){
-  if(!u.is_admin){
-    var css='[class*=sidebar],[class*=Sidebar],[class*=node-browser],[class*=NodeBrowser],[class*=node-palette],[class*=NodePalette],[class*=search-bar],[class*=manager],[class*=Manager],[class*=node-manager],[class*=NodeManager]';
-    css+='{display:none!important}';
-    var s=document.createElement('style');
-    s.textContent=css;
-    document.head.appendChild(s);
-  }
-}).catch(function(){});
-var de=document.createElement('div');de.id='mt-bal';de.style.cssText='position:fixed;bottom:12px;left:12px;z-index:99999;background:rgba(0,0,0,0.75);color:#fff;padding:8px 14px;border-radius:6px;font-size:13px;backdrop-filter:blur(4px);pointer-events:none';de.textContent='\\u901a\\u8bc1: ---';document.body.appendChild(de);var bb=document.createElement('a');bb.href='/?token='+encodeURIComponent(mt);bb.textContent='← 返回';bb.style.cssText='position:fixed;top:12px;right:12px;z-index:99999;background:rgba(0,0,0,0.75);color:#fff;padding:6px 14px;border-radius:6px;font-size:13px;font-family:sans-serif;text-decoration:none;backdrop-filter:blur(4px)';document.body.appendChild(bb);
-var _f=window.fetch;window.fetch=function(u,o){if(o&&o.method==='POST'&&typeof u==='string'&&(u.indexOf('/prompt')>=0||u.indexOf('/queue')>=0)){
-  var b;try{b=JSON.parse(o.body)}catch(e){return _f.apply(this,arguments)}
-  var t=localStorage.getItem('mt_token');if(!t){return new Response('{}',{status:401})}
-  return fetch('/api/workspace/execute',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},body:JSON.stringify({workflow_name:WF_NAME||'unknown',workflow_data:b.prompt||b})})
+
+// Create comfy-header bar
+var hdr=document.createElement("div");hdr.id="comfy-header";
+hdr.style.cssText="position:fixed;top:0;left:0;right:0;z-index:99998;height:48px;display:flex;align-items:center;padding:0 16px;background:rgba(26,29,35,0.95);backdrop-filter:blur(8px);border-bottom:1px solid rgba(255,255,255,0.08)";
+hdr.innerHTML='<div style="display:flex;align-items:center;gap:12px;flex:1"><a href="/?token='+encodeURIComponent(mt)+'" style="color:#667085;text-decoration:none;font-size:13px;padding:4px 8px;border-radius:4px;cursor:pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5m7-7-7 7 7 7"/></svg></a><span style="color:#c4c7d0;font-size:13px;font-weight:500" id="mt-wf-label">'+wfName+'</span></div><div style="display:flex;align-items:center;gap:10px"><span style="color:#667085;font-size:13px" id="mt-hdr-bal">通证: --</span><button id="mt-run-btn" style="padding:6px 18px;background:linear-gradient(135deg,#4f6ef7,#6c5ce7);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">开始生图</button></div>';
+document.body.appendChild(hdr);
+
+// Push ComfyUI canvas down to make room for header
+var pad=document.createElement("style");pad.textContent="body.litegraph{padding-top:48px!important}";
+document.head.appendChild(pad);
+
+// Setup run button
+document.getElementById("mt-run-btn").addEventListener("click",function(){
+  var btn=this;btn.disabled=true;btn.textContent="生成中...";
+  // Trigger queue prompt in ComfyUI
+  if(window.app&&window.app.queuePrompt){
+    window.app.queuePrompt().then(function(){btn.disabled=false;btn.textContent="开始生图"}).catch(function(){btn.disabled=false;btn.textContent="开始生图"});
+  }else{btn.disabled=false;btn.textContent="开始生图"}
+});
+
+// Balance display
+(function(){
+var balEl=document.getElementById("mt-hdr-bal");
+function updateBal(){
+  fetch("/api/users/me/balance",{headers:{"Authorization":"Bearer "+mt}})
   .then(function(r){return r.json()})
-  .then(function(d){
-    var e=document.getElementById('mt-bal');if(e)e.textContent='通证: '+(d.token_balance||'?');
-    return _f(u,o).then(function(resp){resp.clone().json().then(function(data){if(data&&data.prompt_id&&d.session_id){fetch("/api/workspace/track-prompt",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id:d.session_id,prompt_id:data.prompt_id})})}}).catch(function(){});return resp});
-  }).catch(function(){return _f.apply(this,arguments)});
-}return _f.apply(this,arguments)};
+  .then(function(d){balEl.textContent="通证: "+d.token_balance});
+}
+updateBal();
+setInterval(updateBal,15000);
+})();
+
+// Intercept fetch for billing
+var _f=window.fetch;
+window.fetch=function(u,o){
+  if(o&&o.method==="POST"&&typeof u==="string"&&(u.indexOf("/prompt")>=0||u.indexOf("/queue")>=0)){
+    var b;try{b=JSON.parse(o.body)}catch(e){return _f.apply(this,arguments)}
+    var t=localStorage.getItem("mt_token");if(!t){return new Response("{}",{status:401})}
+    return fetch("/api/workspace/execute",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+t},body:JSON.stringify({workflow_name:wfName||"unknown",workflow_data:b.prompt||b})})
+    .then(function(r){return r.json()})
+    .then(function(d){
+      var be=document.getElementById("mt-hdr-bal");if(be)be.textContent="通证: "+(d.token_balance||"?");
+      return _f(u,o).then(function(resp){
+        resp.clone().json().then(function(data){
+          if(data&&data.prompt_id&&d.session_id){
+            fetch("/api/workspace/track-prompt",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id:d.session_id,prompt_id:data.prompt_id})});
+          }
+        }).catch(function(){});
+        return resp;
+      });
+    }).catch(function(){return _f.apply(this,arguments)});
+  }
+  return _f.apply(this,arguments);
+};
 })();
 """
-
-
-def inject_frontend(server):
-    """Register route handlers for frontend auth + lock script injection."""
-    web_root = getattr(server, 'web_root', None)
-    if not web_root:
-        logger.warning("server.web_root not found, cannot inject frontend")
-        return
-
-    # Import auth for token verification
-    from .auth import verify_token
-
-    async def root_handler(request):
-        """Serve: login page, landing page, or ComfyUI workspace."""
-        token = None
-        auth = request.headers.get("Authorization", "")
-        if auth.startswith("Bearer "):
-            token = auth[7:]
-        if not token:
-            token = request.query.get("token", "")
-        if token:
-            payload = verify_token(token)
-            if payload:
-                workflow = request.query.get("workflow", "")
-                if workflow:
-                    return await _serve_comfyui(request, token, payload, web_root, workflow)
-                else:
-                    from .models import get_workflow_templates, get_user
-                    uid = payload.get("user_id")
-                    user = await get_user(id=uid) if uid else None
-                    bal = user["token_balance"] if user else 0
-                    templates = await get_workflow_templates(active_only=True)
-                    cards = ""
-                    if templates:
-                        bg_colors = ["#eef2ff","#f0fdf4","#fff7ed","#fdf2f8","#f0f9ff"]
-                        for i, t in enumerate(templates):
-                            bg = bg_colors[i % 5]
-                            name = t.get("display_name", t["name"])
-                            desc = (t.get("description") or t["name"]).replace('"', "")
-                            cards += '<a class="card" href="/?workflow=' + t["name"] + '&token=' + token + '" style="background:' + bg + '"><div class="name">' + name + '</div><div class="desc">' + desc + '</div></a>\n'
-                    else:
-                        cards = '<div class="empty">\u6682\u65e0\u53ef\u7528\u7684\u5de5\u4f5c\u6d41<br><a href="/admin?token=' + token + '" class="btn btn-primary btn-sm" style="margin-top:12px">\u7ba1\u7406\u540e\u53f0</a></div>'
-                    html = _LANDING_PAGE
-                    html = html.replace("_BALANCE_", str(bal))
-                    html = html.replace("_ADMIN_URL_", "/admin?token=" + token); html = html.replace('href="/admin"', 'href="/admin?token=' + token + '"')
-                    html = html.replace("_CARDS_", cards)
-                    idx = html.find("</head>")
-                    if idx > 0:
-                        ts = '<script>localStorage.setItem("mt_token","' + token + '");'
-                        ts += 'if(location.search.includes("token="))'
-                        ts += 'history.replaceState({},"",location.pathname)</script>\n'
-                        html = html[:idx] + ts + html[idx:]
-                    return web.Response(text=html, content_type="text/html")
-
-        # No valid token — serve login page
-        html = _LOGIN_PAGE
-        if token:
-            html = html.replace(
-                '<div id="mt-err" class="error"></div>',
-                '<div id="mt-err" class="error" style="display:">\u767b\u5f55\u5df2\u8fc7\u671f\uff0c\u8bf7\u91cd\u65b0\u767b\u5f55</div>',
-            )
-        return web.Response(text=html, content_type="text/html")
-
-    async def _serve_comfyui(request, token, payload, web_root, workflow_name=""):
-        """Serve ComfyUI index.html with lock/billing scripts and workflow injection."""
-        idx_path = os.path.join(web_root, "index.html")
-        if not os.path.exists(idx_path):
-            return web.HTTPNotFound()
-        try:
-            with open(idx_path, "r", encoding="utf-8") as f:
-                html = f.read()
-            
-            token_script = (
-                f'<script>localStorage.setItem("mt_token","{token}");'
-                f'if(location.search.includes("token="))'
-                f'history.replaceState({{}},"",location.pathname)</script>'
-            )
-            lock_script = f'<script id="mt-lock">{_LOCK_JS}</script>'
-            
-            # Add workflow injection script (fetches template from API)
-            wf_loader = (
-                '<script id="mt-wf-loader">'
-                '(function(){'
-                'var wfName = localStorage.getItem("mt_wf") || "' + workflow_name + '";'
-                'if(!wfName) return;'
-                'var token = localStorage.getItem("mt_token");'
-                'if(!token) return;'
-                'fetch("/api/jobs/workflows",{headers:{"Authorization":"Bearer "+token}})'
-                '.then(function(r){return r.json()})'
-                '.then(function(list){'
-                '  var tpl = list.find(function(w){return w.name===wfName});'
-                '  if(!tpl || !tpl.comfyui_workflow) return;'
-                '  var wf = tpl.comfyui_workflow;'
-                '  function tryLoad(){'
-                '    if(!window.app||!window.app.graph) return setTimeout(tryLoad,500);'
-                '    var isApi = wf && typeof wf==="object" && !wf.nodes && Object.keys(wf).some(function(k){return /^\\d+$/.test(k)&&wf[k]&&wf[k].class_type});'
-                '    try{'
-                '      if(isApi&&typeof window.app.loadApiJson==="function"){window.app.loadApiJson(wf);return}'
-                '      if(typeof window.app.loadGraphData==="function"){window.app.loadGraphData(wf);return}'
-                '      if(window.app.graph) window.app.graph.configure(wf);'
-                '    }catch(e){console.log("[MT] Load error:",e);setTimeout(tryLoad,1000)}'
-                '  }'
-                '  tryLoad();'
-                '}).catch(function(e){console.log("[MT] Fetch error:",e)});'
-                '})();'
-                '</script>'
-            )
-            
-            if "</head>" in html:
-                html = html.replace("</head>", f"{token_script}\n</head>")
-            if "</body>" in html:
-                html = html.replace("</body>", f"{wf_loader}\n{lock_script}\n</body>")
-            return web.Response(text=html, content_type="text/html")
-        except Exception as e:
-            logger.error(f"Failed to serve index.html: {e}")
-            return web.HTTPInternalServerError()
-
-
-    # Register our handler for / and /index.html (takes priority over web.static)
-    server.app.router.add_get("/", root_handler)
-    server.app.router.add_get("/index.html", root_handler)
-
-    logger.info(f"Frontend injection registered for {web_root}")
-
-    # Register admin panel route
-    try:
-        inject_admin_route(server)
-    except Exception as e:
-        logger.error(f'Admin panel setup error: {e}')
-
 # ── Admin Panel HTML (served at /admin) ──
 _ADMIN_PAGE = """<!DOCTYPE html>
 <html lang="zh-CN">
@@ -476,46 +368,56 @@ _LANDING_PAGE = """<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ComfyUI 多租户</title>
+<title>ComfyUI</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans SC",sans-serif;background:#f5f6fa;color:#1a1d23;min-height:100vh}
-.navbar{display:flex;align-items:center;gap:1rem;padding:0 2rem;height:56px;background:#1a1d23;color:#fff}
-.navbar .brand{font-weight:700;font-size:1.1rem;flex:1}
-.navbar .brand a{color:#fff;text-decoration:none}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans SC",sans-serif;background:#0f0f13;color:#fff;min-height:100vh}
+.navbar{display:flex;align-items:center;gap:1rem;padding:0 2rem;height:56px;background:#1c1e24;border-bottom:1px solid rgba(255,255,255,0.06)}
+.navbar .brand{font-weight:700;font-size:1.1rem;color:#fff;flex:1}
 .navbar .user-info{display:flex;align-items:center;gap:.75rem;font-size:.9rem}
 .navbar .user-info .bal{background:rgba(79,110,247,.2);border:1px solid rgba(79,110,247,.35);border-radius:20px;padding:.25rem .7rem;font-size:.8rem;font-weight:600}
 .container{max-width:1100px;margin:0 auto;padding:2rem}
-.hero{background:linear-gradient(135deg,#1a1d23 0%,#25262b 100%);border-radius:12px;padding:2rem;margin-bottom:2rem;color:#fff}
+.hero{background:linear-gradient(135deg,#1c1e24 0%,#25262b 100%);border-radius:12px;padding:2rem 2.5rem;margin-bottom:2rem;border:1px solid rgba(255,255,255,0.06)}
 .hero h1{font-size:1.5rem;font-weight:700;margin-bottom:4px}
-.hero p{color:#98a2b3;font-size:.9rem}
-.hero .bal{font-size:2rem;font-weight:800;color:#4f6ef7;margin-top:.5rem}
+.hero p{color:#667085;font-size:.9rem}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem}
-.card{background:#fff;border:1px solid #e2e5ea;border-radius:10px;padding:1.25rem 1.5rem;cursor:pointer;transition:all .2s;text-decoration:none;color:inherit;display:block}
-.card:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,.08)}
-.card .name{font-size:1rem;font-weight:600;margin-bottom:.25rem;color:#1a1d23}
+.card{background:#1c1e24;border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:1.25rem 1.5rem;cursor:pointer;transition:all .2s;text-decoration:none;color:inherit;display:block}
+.card:hover{transform:translateY(-2px);border-color:rgba(79,110,247,0.3);box-shadow:0 4px 20px rgba(0,0,0,.3)}
+.card .name{font-size:1rem;font-weight:600;margin-bottom:.25rem;color:#fff}
 .card .desc{font-size:.85rem;color:#667085}
-.empty{text-align:center;color:#98a2b3;padding:3rem}
+.empty{text-align:center;color:#667085;padding:3rem}
 .btn{display:inline-flex;align-items:center;gap:.4rem;padding:.45rem 1rem;border:none;border-radius:6px;font-size:.85rem;font-weight:500;cursor:pointer;white-space:nowrap;text-decoration:none}
-.btn-primary{background:#4f6ef7;color:#fff}
-.btn-outline{background:transparent;border:1px solid #d0d5dd;color:#d0d5dd}.navbar .btn-outline{color:#fff;border-color:rgba(255,255,255,.35)}
-h2{font-size:1.1rem;font-weight:600;margin-bottom:1rem;color:#344054}
+.btn-primary{background:linear-gradient(135deg,#4f6ef7,#6c5ce7);color:#fff}
+.btn-outline{background:transparent;border:1px solid rgba(255,255,255,0.15);color:#c4c7d0}
+.btn-outline:hover{border-color:rgba(255,255,255,0.3)}
+h2{font-size:1.1rem;font-weight:600;margin-bottom:1rem;color:#c4c7d0}
 </style>
 </head>
 <body>
-<div class="navbar"><div class="brand"><a href="/">ComfyUI 多租户</a></div>
+<div class="navbar">
+<div class="brand">ComfyUI</div>
 <div class="user-info">
-<span class="bal">通证: _BALANCE_</span>
-<a id="admin" class="btn btn-sm btn-outline" href="_ADMIN_URL_" style="margin-left:8px">管理后台</a>
-<a href="/" class="btn btn-sm btn-outline" onclick="localStorage.removeItem('mt_token')">退出</a>
-</div></div>
-<div class="container">
-<div class="hero"><div><h1>ComfyUI 工作台</h1><p>选择一个工作流开始生图</p></div></div>
-<h2>工作流模板</h2>
-_CARDS_
+<span class="bal" id="nav-bal">通证: _BALANCE_</span>
+<a id="admin-link" class="btn btn-sm btn-outline" href="_ADMIN_URL_" style="display:none">管理后台</a>
+<a href="/" class="btn btn-sm btn-outline" onclick="localStorage.removeItem(\'mt_token\')">退出</a>
 </div>
+</div>
+<div class="container">
+<div class="hero"><h1>工作台</h1><p>选择一个工作流开始生图</p></div>
+<h2>工作流模板</h2>
+<div id="wf-grid" class="grid">_CARDS_</div>
+</div>
+<script>
+(function(){
+var token=localStorage.getItem("mt_token");
+fetch("/api/auth/me",{headers:{"Authorization":"Bearer "+token}}).then(function(r){return r.json()}).then(function(u){
+  if(u.is_admin){document.getElementById("admin-link").style.display=""}
+});
+})();
+</script>
 </body>
 </html>"""
 
 def inject_landing_page(server):
+    """Landing page is served by root_handler in inject_frontend."""
     pass

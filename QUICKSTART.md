@@ -39,11 +39,13 @@ bash ~/ComfyUI-MultiTenant/install_vanilla.sh
 bash ~/ComfyUI-MultiTenant/start_vanilla.sh        # 前台，Ctrl+C 停止
 bash ~/ComfyUI-MultiTenant/start_vanilla.sh --bg   # 后台
 
+# 常用控制
+bash ~/ComfyUI-MultiTenant/start_vanilla.sh stop       # 停止
+bash ~/ComfyUI-MultiTenant/start_vanilla.sh restart    # 后台重启
+bash ~/ComfyUI-MultiTenant/start_vanilla.sh status     # 查看状态
+
 # 跟随官方更新（停止 -> git pull -> 装依赖 -> 重启）
 bash ~/ComfyUI-MultiTenant/update_vanilla.sh
-
-# 停止
-pkill -f "port 8189"
 ```
 
 自定义目录/端口：

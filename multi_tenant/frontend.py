@@ -66,8 +66,8 @@ document.getElementById("mt-u").focus();
 _LOCK_JS = """
 (function(){var mt=localStorage.getItem("mt_token");if(!mt)return;var t=mt;var wn=(new URLSearchParams(location.search)).get("workflow")||localStorage.getItem("mt_wf")||"";
 var wl=[];fetch("/api/jobs/workflows",{headers:{"Authorization":"Bearer "+mt}}).then(function(r){return r.json()}).then(function(l){wl=l;l.forEach(function(w){var o=document.createElement("option");o.value=w.name;o.textContent=w.display_name||w.name;if(w.name===wn)o.selected=true;document.getElementById("mt-ws").appendChild(o)});if(!wn&&l.length>0){wn=l[0].name;document.getElementById("mt-ws").value=wn;localStorage.setItem("mt_wf",wn);document.getElementById("mt-wn").textContent=wn;lw(wn)}}).catch(function(){});
-fetch("/api/auth/me",{headers:{"Authorization":"Bearer "+mt}}).then(function(r){return r.json()}).then(function(u){if(u.is_admin){document.getElementById("mt-la").style.display=""}else{var c="[class*=sidebar],[class*=Sidebar],[class*=node-browser],[class*=NodeBrowser],[class*=node-palette],[class*=NodePalette],[class*=search-bar],[class*=manager],[class*=Manager],[class*=node-manager],[class*=NodeManager],[data-testid*=setting],[class*=console],[class*=Console]";c+="{display:none!important}";var s=document.createElement("style");s.textContent=c;document.head.appendChild(s)}}).catch(function(){});
-var n=document.createElement("div");n.id="mt-nav";n.style.cssText="position:fixed;top:0;left:0;right:0;z-index:99999;height:48px;display:flex;align-items:center;padding:0 16px;background:rgba(26,29,35,0.96);backdrop-filter:blur(8px);border-bottom:1px solid rgba(255,255,255,0.06)";n.innerHTML="<div style=\\"display:flex;align-items:center;gap:16px;flex:1\\"><span style=\\"font-weight:700;font-size:15px;color:#fff\\">ComfyUI</span><select id=\\"mt-ws\\" style=\\"padding:5px 28px 5px 10px;border:1px solid rgba(255,255,255,0.1);border-radius:6px;background:#141518;color:#fff;font-size:13px;cursor:pointer;outline:none;max-width:260px\\"><option value=\\"\\">载入工作流...</option></select></div><div style=\\"display:flex;align-items:center;gap:10px\\"><span style=\\"color:#667085;font-size:13px\\" id=\\"mt-nb\\">Token: --</span><a id=\\"mt-la\\" href=\\"/admin?token="+encodeURIComponent(mt)+"\\" style=\\"display:none;color:#4f6ef7;font-size:13px;text-decoration:none\\">管理</a><a href=\\"/\\" onclick=\\"localStorage.removeItem(\\'mt_token\\')\\" style=\\"color:#667085;font-size:13px;text-decoration:none;padding:4px 10px;border-radius:4px;border:1px solid rgba(255,255,255,0.1)\\">退出</a></div>";document.body.appendChild(n);
+fetch("/api/auth/me",{headers:{"Authorization":"Bearer "+mt}}).then(function(r){return r.json()}).then(function(u){if(u.is_admin){document.getElementById("mt-la").style.display="";document.getElementById("mt-raw-link").style.display=""}else{var c="[class*=sidebar],[class*=Sidebar],[class*=node-browser],[class*=NodeBrowser],[class*=node-palette],[class*=NodePalette],[class*=search-bar],[class*=manager],[class*=Manager],[class*=node-manager],[class*=NodeManager],[data-testid*=setting],[class*=console],[class*=Console]";c+="{display:none!important}";var s=document.createElement("style");s.textContent=c;document.head.appendChild(s)}}).catch(function(){});
+var n=document.createElement("div");n.id="mt-nav";n.style.cssText="position:fixed;top:0;left:0;right:0;z-index:99999;height:48px;display:flex;align-items:center;padding:0 16px;background:rgba(26,29,35,0.96);backdrop-filter:blur(8px);border-bottom:1px solid rgba(255,255,255,0.06)";n.innerHTML="<div style=\\"display:flex;align-items:center;gap:16px;flex:1\\"><span style=\\"font-weight:700;font-size:15px;color:#fff\\">ComfyUI</span><select id=\\"mt-ws\\" style=\\"padding:5px 28px 5px 10px;border:1px solid rgba(255,255,255,0.1);border-radius:6px;background:#141518;color:#fff;font-size:13px;cursor:pointer;outline:none;max-width:260px\\"><option value=\\"\\">载入工作流...</option></select></div><div style=\\"display:flex;align-items:center;gap:10px\\"><span style=\\"color:#667085;font-size:13px\\" id=\\"mt-nb\\">Token: --</span><a id=\\"mt-la\\" href=\\"/admin?token="+encodeURIComponent(mt)+"\\" style=\\"display:none;color:#4f6ef7;font-size:13px;text-decoration:none\\">管理</a><a id=\\"mt-raw-link\\" href=\\"/raw?token="+encodeURIComponent(mt)+"\\" style=\\"display:none;color:#98a2b3;font-size:13px;text-decoration:none;margin-left:8px\\">原版入口</a><a href=\\"/\\" onclick=\\"localStorage.removeItem(\\'mt_token\\')\\" style=\\"color:#667085;font-size:13px;text-decoration:none;padding:4px 10px;border-radius:4px;border:1px solid rgba(255,255,255,0.1)\\">退出</a></div>";document.body.appendChild(n);
 var h=document.createElement("div");h.style.cssText="position:fixed;top:48px;left:0;right:0;z-index:99998;height:44px;display:flex;align-items:center;padding:0 16px;background:rgba(30,32,38,0.95);backdrop-filter:blur(8px);border-bottom:1px solid rgba(255,255,255,0.06)";h.innerHTML="<div style=\\"display:flex;align-items:center;gap:10px;flex:1\\"><span style=\\"color:#c4c7d0;font-size:13px;font-weight:500\\" id=\\"mt-wn\\">"+wn+"</span></div><div style=\\"display:flex;align-items:center;gap:10px\\"><button id=\\"mt-rb\\" style=\\"padding:6px 20px;background:linear-gradient(135deg,#4f6ef7,#6c5ce7);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px\\"><svg width=\\"14\\" height=\\"14\\" viewBox=\\"0 0 24 24\\" fill=\\"currentColor\\"><path d=\\"M8 5v14l11-7z\\"/></svg>开始生图</button></div>";document.body.appendChild(h);
 var p=document.createElement("style");p.textContent="body.litegraph{padding-top:92px!important}";document.head.appendChild(p);
 document.getElementById("mt-ws").addEventListener("change",function(){wn=this.value;localStorage.setItem("mt_wf",wn);document.getElementById("mt-wn").textContent=wn;lw(wn)});
@@ -173,9 +173,36 @@ def inject_frontend(server):
             return web.HTTPInternalServerError()
 
 
+    async def raw_comfyui_handler(request):
+        """Serve untouched vanilla ComfyUI for admin debugging (no lock script)."""
+        token = request.query.get("token", "")
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            token = auth[7:]
+        if not token:
+            return web.HTTPFound("/")
+
+        payload = verify_token(token)
+        if not payload:
+            return web.HTTPFound("/")
+
+        from .models import get_user
+        uid = payload.get("user_id")
+        user = await get_user(id=uid) if uid else None
+        if not user or not user["is_admin"]:
+            return web.json_response({"detail": "需要管理员权限"}, status=403)
+
+        idx_path = os.path.join(web_root, "index.html")
+        if not os.path.exists(idx_path):
+            return web.HTTPNotFound()
+        with open(idx_path, "r", encoding="utf-8") as f:
+            html = f.read()
+        return web.Response(text=html, content_type="text/html")
+
     # Register our handler for / and /index.html (takes priority over web.static)
     server.app.router.add_get("/", root_handler)
     server.app.router.add_get("/index.html", root_handler)
+    server.app.router.add_get("/raw", raw_comfyui_handler)
 
     logger.info(f"Frontend injection registered for {web_root}")
 

@@ -7,6 +7,28 @@ VANILLA_DIR="${1:-$HOME/ComfyUI-Vanilla}"
 PORT="${2:-8189}"
 
 echo "=== 安装原版 ComfyUI 到 $VANILLA_DIR (端口 $PORT) ==="
+
+# 0. 选择 Python >= 3.10（官方新版要求）
+PYTHON=""
+for p in python3.12 python3.11 python3.10 python3; do
+  if command -v "$p" >/dev/null 2>&1; then
+    VER=$("$p" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "0.0")
+    MAJOR=${VER%%.*}
+    MINOR=${VER#*.}
+    MINOR=${MINOR%%.*}
+    if [ "$MAJOR" -eq 3 ] && [ "$MINOR" -ge 10 ]; then
+      PYTHON="$p"
+      echo "Using Python: $p ($VER)"
+      break
+    fi
+  fi
+done
+if [ -z "$PYTHON" ]; then
+  echo "错误: 需要 Python >=3.10，当前机器没有。"
+  echo "安装方法: brew install python@3.11"
+  exit 1
+fi
+
 mkdir -p "$VANILLA_DIR"
 cd "$VANILLA_DIR"
 
@@ -19,10 +41,20 @@ else
   git pull
 fi
 
-# 2. Python venv
+# 2. Python venv（如果不存在或版本过旧，重建）
 if [ ! -d "venv" ]; then
   echo "Creating venv..."
-  python3 -m venv venv
+  "$PYTHON" -m venv venv
+else
+  VENV_VER="$(venv/bin/python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo '0.0')"
+  VENV_MAJOR=${VENV_VER%%.*}
+  VENV_MINOR=${VENV_VER#*.}
+  VENV_MINOR=${VENV_MINOR%%.*}
+  if [ "$VENV_MAJOR" -lt 3 ] || [ "$VENV_MINOR" -lt 10 ]; then
+    echo "现有 venv 是 Python $VENV_VER，太旧，重建..."
+    rm -rf venv
+    "$PYTHON" -m venv venv
+  fi
 fi
 source venv/bin/activate
 

@@ -1,3 +1,8 @@
+> ### 🔧 本仓库多租户版速查
+> 正式（多租户）：`bash setup.sh` → `http://<IP>:8188`，管理员 `admin/admin123`
+> 原版测试：`~/ComfyUI-Vanilla`，端口 8189，`start_vanilla.sh` / `update_vanilla.sh`
+> 完整备忘见 **[QUICKSTART.md](QUICKSTART.md)**
+
 <div align="center">
 
 # ComfyUI

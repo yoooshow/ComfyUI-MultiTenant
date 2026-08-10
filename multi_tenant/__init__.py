@@ -21,6 +21,11 @@ def setup_routes_sync(server):
     Initializes DB, creates admin user, registers routes.
     All synchronous — runs before any requests arrive.
     """
+    from .config import is_bypass
+    if is_bypass():
+        logger.info("Multi-tenant bypass enabled (MT_BYPASS=1) - running vanilla ComfyUI")
+        return
+
     # 1. Initialize database synchronously
     from folder_paths import get_user_directory
     user_dir = get_user_directory()
@@ -70,6 +75,11 @@ def setup_routes_sync(server):
 
 async def setup(server):
     """Initialize multi-tenant system. Called from server.py in a background task."""
+    from .config import is_bypass
+    if is_bypass():
+        logger.info("Multi-tenant bypass enabled - skipping async setup")
+        return
+
     logger.info("Initializing Multi-Tenant billing system (async)...")
 
     from folder_paths import get_user_directory

@@ -6,6 +6,11 @@ _SECRET_KEY = None
 _DB_PATH = None
 
 
+def is_bypass() -> bool:
+    """When MT_BYPASS=1, run vanilla ComfyUI without multi-tenant features."""
+    return os.environ.get("MT_BYPASS", "").strip().lower() in ("1", "true", "yes", "on")
+
+
 def get_secret_key() -> bytes:
     global _SECRET_KEY
     if _SECRET_KEY is None:

@@ -9,14 +9,15 @@ def get_db_path(server=None) -> str:
         try:
             from folder_paths import get_user_directory
             user_dir = get_user_directory()
-            db_dir = os.path.join(user_dir, "..", "mt_data")
+            db_dir = os.path.join(user_dir, "mt_data")
             os.makedirs(db_dir, exist_ok=True)
             return os.path.join(db_dir, "mt.db")
         except Exception:
             pass
     # Fallback: plugin-local data directory
+    # custom_nodes/comfyui_mt/../../user/mt_data = <ComfyUI>/user/mt_data
     plugin_dir = os.path.dirname(os.path.abspath(__file__))
-    db_dir = os.path.join(plugin_dir, "..", "..", "..", "user", "mt_data")
+    db_dir = os.path.join(plugin_dir, "..", "..", "user", "mt_data")
     os.makedirs(db_dir, exist_ok=True)
     return os.path.join(db_dir, "mt.db")
 

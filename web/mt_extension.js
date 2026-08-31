@@ -36,9 +36,17 @@
   }
 
   // ── Auth Helpers ──
+  function getCookie(name) {
+    try {
+      const m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+      return m ? decodeURIComponent(m[1]) : '';
+    } catch(e) { return ''; }
+  }
+
   function getToken() {
     if (mtToken) return mtToken;
     try { mtToken = localStorage.getItem('mt_token') || ''; } catch(e) { mtToken = ''; }
+    if (!mtToken) mtToken = getCookie('mt_token') || '';
     return mtToken;
   }
 
@@ -488,23 +496,26 @@
   }
 
   // ── Preview Image Restore (refresh survival) ──
-  // ComfyUI shows PreviewImage output from app.nodePreviewImages[locatorId].
-  // After refresh/restart, temp files are gone but our persisted previews
-  // survive. On workflow load, we fetch persisted previews and re-inject
-  // their URLs into app.nodePreviewImages so nodes display them again.
+  // Restore persisted previews into nodeOutputs so the native image URL
+  // builder (/view?type=output) can serve them after refresh/restart.
+  // Returns true when the graph had PreviewImage nodes to restore into.
   async function restorePreviewImages() {
     try {
-      if (!mtUser) { document.title = '[MT] restore: no user'; return; }
-      document.title = '[MT] restore: fetching...';
-      // Fetch all persisted previews for this user (grouped by workflow)
+      if (!mtUser) { document.title = '[MT] restore: no user'; return false; }
+      const app = window.app;
+      const graph = app?.graph || app?.rootGraph;
+      if (!graph) { document.title = '[MT] restore: no graph'; return false; }
+      const previewNodes = graph._nodes.filter(n => (n.type || '').includes('PreviewImage'));
+      document.title = '[MT] restore: nodes=' + previewNodes.length;
+      if (!previewNodes.length) return false;
+
       const r = await fetch(MT_API + '/previews/all', { headers: getAuthHeaders() });
-      if (!r.ok) { document.title = '[MT] restore: api ' + r.status; return; }
+      if (!r.ok) { document.title = '[MT] restore: api ' + r.status; return false; }
       const data = await r.json();
       const previews = data.items || [];
-      if (!previews.length) { document.title = '[MT] restore: 0 previews'; return; }
+      if (!previews.length) { document.title = '[MT] restore: 0 previews'; return false; }
 
-      // Get current workflow id from ComfyUI graph state
-      const app = window.app;
+      // Current workflow id
       let wfId = null;
       try {
         wfId = app?.rootGraph?.id ||
@@ -514,70 +525,66 @@
                null;
       } catch(e) {}
 
-      // Match previews to this workflow. If the graph has no stable id yet
-      // (fresh unsaved workflow), fall back to ANY persisted preview for the
-      // matching node ids — this covers "workflow was renamed" and
-      // "unsaved but previously executed" cases.
       let wfPreviews = wfId ? previews.filter(p => p.workflow_id === wfId) : [];
-      const graph = app?.graph || app?.rootGraph;
-      if (!graph) { document.title = '[MT] restore: no graph'; return; }
-      const previewNodes = graph._nodes.filter(n => (n.type || '').includes('PreviewImage'));
-      document.title = '[MT] restore: wf=' + (wfId || 'null') + ' nodes=' + previewNodes.length + ' pv=' + previews.length;
-
-      // If no workflow-id match, match purely by node_id across this user's
-      // previews (latest first). This still guarantees each node only gets
-      // its OWN image — never another node's.
+      // Fallback: match by node_id across this user's previews
       if (!wfPreviews.length) {
         const nodeIds = new Set(previewNodes.map(n => String(n.id)));
         wfPreviews = previews.filter(p => nodeIds.has(String(p.node_id)));
       }
 
-      // Build preview URL for each node. ONLY exact node_id match — a
-      // PreviewImage node that never ran must NOT get another node's image.
-      //
-      // We write to app.nodeOutputs (NOT nodePreviewImages) because the
-      // native frontend reads nodeOutputs for the fallback image URL builder
-      // (buildImageUrls -> /view?type=output), and app.nodeOutputs has a
-      // setter that syncs into the Pinia store automatically. Persisted
-      // previews live in the output dir, so the native /view endpoint can
-      // serve them — no blob/URL management needed.
-      const outputDir = 'mt_previews/' + mtUser.id + '/' + encodeURIComponent(wfId || 'default');
+      if (!app.nodeOutputs) app.nodeOutputs = {};
+      let injected = 0;
       previewNodes.forEach((node) => {
         const locatorId = String(node.id);
         const p = wfPreviews.find(x => String(x.node_id) === locatorId);
         if (!p) return; // no persisted preview for THIS node — leave empty
         const sub = 'mt_previews/' + mtUser.id + '/' + p.workflow_id;
-        if (!app.nodeOutputs) app.nodeOutputs = {};
         app.nodeOutputs[locatorId] = {
           images: [{ filename: p.filename, subfolder: sub, type: 'output' }]
         };
-        // Force the store to pick it up via the legacy bridge
-        try {
-          app.nodeOutputs = { ...app.nodeOutputs };
-        } catch(e) {}
-        console.log('[MT] Restored preview for node', locatorId, '->', sub + '/' + p.filename);
+        injected++;
       });
-
-      // Refresh node display
-      try {
-        if (app.canvas) app.canvas.draw(true, true);
-      } catch(e) {}
+      if (injected) {
+        try { app.nodeOutputs = { ...app.nodeOutputs }; } catch(e) {}
+        document.title = '[MT] restore: OK injected=' + injected;
+        console.log('[MT] Restored', injected, 'previews');
+      }
+      return injected > 0;
     } catch(e) {
       console.error('[MT] restorePreviewImages error:', e);
+      document.title = '[MT] restore: error';
+      return false;
     }
+  }
+
+  // Poll restore until the graph is ready (ComfyUI SPA mounts async).
+  function startRestorePolling() {
+    let attempts = 0;
+    const timer = setInterval(async () => {
+      attempts++;
+      const ok = await restorePreviewImages();
+      if (ok || attempts > 15) { // ~30s cap
+        clearInterval(timer);
+        if (ok) document.title = '[MT] restore polling: done';
+      }
+    }, 2000);
   }
 
   // ── Initialization ──
   async function init() {
+    document.title = '[MT] init: start';
     // Skip if on login page
-    if (document.querySelector('.login-card')) return;
+    if (document.querySelector('.login-card')) { document.title = '[MT] init: login page'; return; }
 
     // Fetch user
+    document.title = '[MT] init: fetching user...';
     await fetchUser();
+    document.title = mtUser ? ('[MT] init: user=' + mtUser.username) : '[MT] init: NO USER';
     if (!mtUser) {
       // Not logged in — middleware serves login page; force reload if somehow here
       if (!document.querySelector('.login-card')) {
         addBootMarker('MT: no auth, reload');
+        document.title = '[MT] init: no auth, reload';
         window.location.reload();
       }
       return;
@@ -588,8 +595,8 @@
     ensureUserMenuPresent();
     setupWorkflowBadges();
     setupPreviewPersistence();
-    // Restore persisted previews after ComfyUI app is ready
-    setTimeout(restorePreviewImages, 2500);
+    // Restore persisted previews — poll until the graph is ready
+    startRestorePolling();
 
     // Re-restore previews whenever a workflow is loaded/switched —
     // ComfyUI calls app.loadGraphData(data, ...) on workflow load.

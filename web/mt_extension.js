@@ -8,6 +8,13 @@
 (function() {
   'use strict';
 
+  // ── Loaded marker ──
+  // Written synchronously as soon as this script runs, so we can always tell
+  // whether the browser executed the CURRENT version of this file.
+  try {
+    document.title = '[MT-LOADED v30]';
+  } catch(e) {}
+
   const MT_API = '/api/mt';
   let mtUser = null;
   let mtToken = null;
@@ -487,13 +494,14 @@
   // their URLs into app.nodePreviewImages so nodes display them again.
   async function restorePreviewImages() {
     try {
-      if (!mtUser) return;
+      if (!mtUser) { document.title = '[MT] restore: no user'; return; }
+      document.title = '[MT] restore: fetching...';
       // Fetch all persisted previews for this user (grouped by workflow)
       const r = await fetch(MT_API + '/previews/all', { headers: getAuthHeaders() });
-      if (!r.ok) return;
+      if (!r.ok) { document.title = '[MT] restore: api ' + r.status; return; }
       const data = await r.json();
       const previews = data.items || [];
-      if (!previews.length) return;
+      if (!previews.length) { document.title = '[MT] restore: 0 previews'; return; }
 
       // Get current workflow id from ComfyUI graph state
       const app = window.app;
@@ -512,9 +520,9 @@
       // "unsaved but previously executed" cases.
       let wfPreviews = wfId ? previews.filter(p => p.workflow_id === wfId) : [];
       const graph = app?.graph || app?.rootGraph;
-      if (!graph) return;
+      if (!graph) { document.title = '[MT] restore: no graph'; return; }
       const previewNodes = graph._nodes.filter(n => (n.type || '').includes('PreviewImage'));
-      if (!previewNodes.length) return;
+      document.title = '[MT] restore: wf=' + (wfId || 'null') + ' nodes=' + previewNodes.length + ' pv=' + previews.length;
 
       // If no workflow-id match, match purely by node_id across this user's
       // previews (latest first). This still guarantees each node only gets
@@ -601,24 +609,22 @@
       console.error('[MT] loadGraphData hook error:', e);
     }
 
-    // DIAGNOSTIC: watch store state after executions
+    // After each execution finishes, restore persisted previews — the native
+    // frontend revokes previews on execution complete (blob lifecycle), so we
+    // re-inject persisted ones so they stay visible without F5.
     try {
       const app = window.app;
       if (app && app.api && app.api.addEventListener) {
+        app.api.addEventListener('execution_success', () => {
+          setTimeout(restorePreviewImages, 300);
+        });
         app.api.addEventListener('executed', (evt) => {
           try {
             const d = evt?.detail || {};
-            document.title = '[MT-diag] executed node=' + (d.node ?? d.display_node) + ' output=' + JSON.stringify(d.output || {}).slice(0, 120);
+            document.title = '[MT-diag] executed node=' + (d.node ?? d.display_node) + ' out=' + JSON.stringify(d.output || {}).slice(0, 100);
           } catch(e) {}
         });
-        app.api.addEventListener('execution_success', () => {
-          try {
-            const st = app.nodePreviewImages ? Object.keys(app.nodePreviewImages).length : -1;
-            const st2 = app.nodeOutputs ? Object.keys(app.nodeOutputs).length : -1;
-            document.title = '[MT-diag] success previews=' + st + ' outputs=' + st2;
-          } catch(e) {}
-        });
-        console.log('[MT] diagnostic listeners registered');
+        console.log('[MT] executed/execution_success listeners registered');
       }
     } catch(e) {
       console.error('[MT] diag error:', e);

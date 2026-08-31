@@ -76,6 +76,25 @@ class MultiTenantExtension(ComfyExtension):
             except Exception as e:
                 root_logger.warning(f"[ComfyUI-MT] Preview persistence setup failed: {e}")
 
+            # Setup per-user isolation (patch UserManager.get_request_user_id)
+            try:
+                from .isolation import setup_user_isolation, resync_all_za_workflows
+                server = None
+                import sys
+                for module_name, module in sys.modules.items():
+                    if module_name == 'server' or module_name.endswith('.server'):
+                        if hasattr(module, 'PromptServer') and getattr(module, 'PromptServer').instance is not None:
+                            server = getattr(module, 'PromptServer').instance
+                            break
+                if server:
+                    setup_user_isolation(server)
+                    # Sync existing Z&A workflows to all users so they appear
+                    # in the native workflow browser
+                    resync_all_za_workflows()
+                    root_logger.info("[ComfyUI-MT] User isolation enabled")
+            except Exception as e:
+                root_logger.warning(f"[ComfyUI-MT] User isolation setup failed: {e}")
+
             # Write status to file for debugging
             try:
                 from .config import get_db_path

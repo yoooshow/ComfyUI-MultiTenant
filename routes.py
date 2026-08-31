@@ -175,6 +175,14 @@ def setup_api_routes(server):
         if not workflow:
             return web.json_response({"detail": "工作流名称已存在"}, status=409)
 
+        # Sync Z&A workflow to all users' native workflow dirs (appears in browser)
+        if is_za:
+            try:
+                from .isolation import sync_za_workflow_to_users
+                sync_za_workflow_to_users(workflow_data, display_name)
+            except Exception as e:
+                logger.error(f"[ComfyUI-MT] Z&A file sync failed: {e}")
+
         return web.json_response(workflow, status=201)
 
     @server.routes.get("/api/mt/workflows/{workflow_id}")
@@ -244,6 +252,14 @@ def setup_api_routes(server):
         # Check permission
         if workflow["owner_id"] != user["id"] and not user["is_admin"]:
             return web.json_response({"detail": "无权删除"}, status=403)
+
+        # Remove Z&A workflow files from all users' native dirs
+        if workflow["is_za_workflow"]:
+            try:
+                from .isolation import remove_za_workflow_from_users
+                remove_za_workflow_from_users(workflow["display_name"])
+            except Exception as e:
+                logger.error(f"[ComfyUI-MT] Z&A file remove failed: {e}")
 
         await delete_workflow(workflow_id)
         return web.json_response({"status": "deleted"})

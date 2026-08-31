@@ -16,6 +16,8 @@ import os
 import random
 import shutil
 import string
+import threading
+import time
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
@@ -96,6 +98,24 @@ def setup_preview_persistence(server) -> None:
             logger.info("[ComfyUI-MT] on_prompt handler registered (mt_user_id injection)")
         except Exception as e:
             logger.error(f"[ComfyUI-MT] add_on_prompt_handler failed: {e}")
+
+        # Hook send_sync to capture "executed" events: each node that finishes
+        # pushes {"node": node_id, "output": output_ui, "prompt_id": ...}.
+        # When output has images, record the node_id -> filename mapping so
+        # preview restore can match each PreviewImage node to its own image.
+        try:
+            original_send_sync = server.send_sync
+            def patched_send_sync(event, data, sid=None):
+                if event == "executed":
+                    try:
+                        _capture_executed_mapping(data)
+                    except Exception:
+                        pass
+                return original_send_sync(event, data, sid)
+            server.send_sync = patched_send_sync
+            logger.info("[ComfyUI-MT] send_sync hooked (executed node->image mapping)")
+        except Exception as e:
+            logger.error(f"[ComfyUI-MT] send_sync hook failed: {e}")
 
     except Exception as e:
         logger.error(f"[ComfyUI-MT] Failed to setup preview persistence: {e}")
@@ -198,6 +218,67 @@ def _persist_results(self, results, images, prompt, extra_pnginfo) -> dict:
         results["ui"]["images"] = persisted
 
     return results
+
+
+# In-memory queue of executed node->image mappings, flushed to DB in a
+# background thread so we never block ComfyUI's execution thread/event loop.
+_mapping_queue = []
+_mapping_lock = threading.Lock()
+_mapping_flusher = None
+
+
+def _flush_mapping_queue() -> None:
+    """Background thread: batch-write queued node->filename mappings to DB."""
+    global _mapping_queue
+    while True:
+        try:
+            time.sleep(2)
+            with _mapping_lock:
+                batch = _mapping_queue
+                _mapping_queue = []
+            if not batch:
+                continue
+            from .models import _get_db
+            db = _get_db()
+            try:
+                for node_id, filename in batch:
+                    db.execute(
+                        "UPDATE preview_images SET node_id=? WHERE filename=? AND node_id='preview'",
+                        (node_id, filename)
+                    )
+                db.commit()
+            except Exception:
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
+        except Exception:
+            time.sleep(5)
+
+
+def _enqueue_mapping(node_id: str, filename: str) -> None:
+    global _mapping_flusher
+    with _mapping_lock:
+        _mapping_queue.append((node_id, filename))
+    if _mapping_flusher is None or not _mapping_flusher.is_alive():
+        _mapping_flusher = threading.Thread(target=_flush_mapping_queue, daemon=True, name="mt-mapping-flusher")
+        _mapping_flusher.start()
+
+
+def _capture_executed_mapping(data: dict) -> None:
+    """Queue node_id -> image filename mapping from an executed event (non-blocking)."""
+    node_id = str(data.get("node", ""))
+    output = data.get("output") or {}
+    ui = output.get("ui") if isinstance(output, dict) else None
+    images = (ui or output or {}).get("images") or []
+    if not node_id or not images:
+        return
+    for img in images:
+        if not isinstance(img, dict):
+            continue
+        filename = img.get("filename", "")
+        if filename:
+            _enqueue_mapping(node_id, filename)
 
 
 async def cleanup_preview_files(user_id: int, workflow_id: str) -> int:

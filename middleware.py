@@ -46,7 +46,9 @@ _PUBLIC_PREFIXES = (
     "/api/experiments",
     "/api/feature_flags",
     "/api/workflow_templates",
-    "/api/models",     # model list — actually restricted below, keep public for now
+    # NOTE: /api/models is intentionally NOT public — it is restricted to
+    # admins via _RESTRICTED_FOR_USER_PREFIXES below. Keeping it here made
+    # the public check short-circuit before the restricted check ran.
 )
 
 # Execution/admin endpoints — require authentication
@@ -59,13 +61,21 @@ _AUTH_REQUIRED_PREFIXES = (
     "/api/mt/admin/",   # admin endpoints
 )
 
-# Model/template management — hidden from non-admin users
+# Model/template/manager/settings — hidden from non-admin users
+# (both UI entry and API access are blocked for non-admin)
 _RESTRICTED_FOR_USER_PREFIXES = (
-    "/api/models",
-    "/api/model_",
-    "/api/templates",
-    "/api/userdata/models",
+    "/api/models",           # model library list/manage
+    "/api/model_",           # model download/upload/etc
+    "/api/templates",        # workflow templates
+    "/api/userdata/models",  # user model data
+    "/manager/",             # ComfyUI-Manager (install/update nodes & models)
+    "/api/manager",          # manager API alternate prefix
+    "/api/settings",         # settings write (GET is public-ish for UI)
+    "/api/system_stats",     # system stats (resource info)
+    "/api/userdata/audit",   # audit log
 )
+# Settings GET must remain readable by the frontend for non-admin UI;
+# only block writes (PUT/POST). Handled in middleware below.
 
 
 def _is_public_path(path: str) -> bool:
@@ -98,12 +108,26 @@ def setup_middleware(server):
     async def auth_middleware(request: web.Request, handler):
         path = request.path
 
+        # Authenticate first (cheap — cookie/header lookup)
+        user = await get_user_from_request(request)
+
+        # Restricted-for-user endpoints must be checked BEFORE the public
+        # pass-through, otherwise the public prefix list short-circuits and
+        # the restriction never runs.
+        if _is_restricted_for_user(path):
+            if user is None:
+                return web.json_response({"detail": "未登录"}, status=401)
+            if not user.get("is_admin", False):
+                # Settings GET stays readable so the frontend can render;
+                # block only settings writes (PUT/POST).
+                if path.startswith("/api/settings") and request.method == "GET":
+                    pass
+                else:
+                    return web.json_response({"detail": "需要管理员权限"}, status=403)
+
         # Public paths pass through (no auth needed)
         if _is_public_path(path) and not _requires_auth(path):
             return await handler(request)
-
-        # Authenticate
-        user = await get_user_from_request(request)
 
         # Main page: serve login page if not authenticated
         if path in ("/", "/index.html"):

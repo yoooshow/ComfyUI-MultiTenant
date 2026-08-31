@@ -289,6 +289,32 @@ def setup_api_routes(server):
         await save_preview_image(user["id"], workflow_id, node_id, filename, file_path)
         return web.json_response({"status": "saved"})
 
+    @server.routes.get("/api/mt/previews/all")
+    async def get_all_previews(request):
+        """Get ALL persisted previews for the current user (for refresh restore)."""
+        user = await get_user_from_request(request)
+        if not user:
+            return web.json_response({"detail": "未登录"}, status=401)
+
+        from .models import _get_db
+        db = _get_db()
+        rows = db.execute(
+            "SELECT * FROM preview_images WHERE user_id=? ORDER BY created_at DESC",
+            (user["id"],)
+        ).fetchall()
+        return web.json_response({
+            "items": [
+                {
+                    "workflow_id": r["workflow_id"],
+                    "node_id": r["node_id"],
+                    "filename": r["filename"],
+                    "file_path": r["file_path"],
+                    "created_at": r["created_at"],
+                }
+                for r in rows
+            ]
+        })
+
     @server.routes.get("/api/mt/previews/{workflow_id}")
     async def get_previews(request):
         """Get preview images for a workflow."""

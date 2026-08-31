@@ -480,6 +480,63 @@
     console.log('[MT] Preview persistence ready');
   }
 
+  // ── Preview Image Restore (refresh survival) ──
+  // ComfyUI shows PreviewImage output from app.nodePreviewImages[locatorId].
+  // After refresh/restart, temp files are gone but our persisted previews
+  // survive. On workflow load, we fetch persisted previews and re-inject
+  // their URLs into app.nodePreviewImages so nodes display them again.
+  async function restorePreviewImages() {
+    try {
+      if (!mtUser) return;
+      // Fetch all persisted previews for this user (grouped by workflow)
+      const r = await fetch(MT_API + '/previews/all', { headers: getAuthHeaders() });
+      if (!r.ok) return;
+      const data = await r.json();
+      const previews = data.items || [];
+      if (!previews.length) return;
+
+      // Get current workflow id from ComfyUI graph state
+      const app = window.app;
+      let wfId = null;
+      try {
+        wfId = app?.rootGraph?.id ||
+               app?.graph?.id ||
+               (app?.graph?.serialize ? app.graph.serialize().id : null) ||
+               app?.workflowManager?.activeWorkflow?.id ||
+               null;
+      } catch(e) {}
+
+      // Match previews to this workflow
+      const wfPreviews = previews.filter(p => p.workflow_id === wfId);
+      if (!wfPreviews.length) return;
+
+      // Find PreviewImage nodes in current graph
+      const graph = app?.graph || app?.rootGraph;
+      if (!graph) return;
+      const previewNodes = graph._nodes.filter(n => (n.type || '').includes('PreviewImage'));
+      if (!previewNodes.length) return;
+
+      // Build preview URL for each node. ONLY exact node_id match — a
+      // PreviewImage node that never ran must NOT get another node's image.
+      if (!app.nodePreviewImages) app.nodePreviewImages = {};
+      previewNodes.forEach((node) => {
+        const locatorId = String(node.id);
+        const p = wfPreviews.find(x => String(x.node_id) === locatorId);
+        if (!p) return; // no persisted preview for THIS node — leave empty
+        const url = MT_API + '/previews/' + encodeURIComponent(p.workflow_id) + '/img/' + encodeURIComponent(p.filename);
+        app.nodePreviewImages[locatorId] = [url];
+        console.log('[MT] Restored preview for node', locatorId, '->', url);
+      });
+
+      // Refresh node display
+      try {
+        if (app.canvas) app.canvas.draw(true, true);
+      } catch(e) {}
+    } catch(e) {
+      console.error('[MT] restorePreviewImages error:', e);
+    }
+  }
+
   // ── Initialization ──
   async function init() {
     // Skip if on login page
@@ -501,6 +558,8 @@
     ensureUserMenuPresent();
     setupWorkflowBadges();
     setupPreviewPersistence();
+    // Restore persisted previews after ComfyUI app is ready
+    setTimeout(restorePreviewImages, 2500);
 
     // Watch for Vue re-renders: re-hide + re-mount menu
     const observer = new MutationObserver(() => {

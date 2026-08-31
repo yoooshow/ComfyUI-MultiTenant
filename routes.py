@@ -43,7 +43,7 @@ def setup_api_routes(server):
             return web.json_response({"detail": "用户已被禁用"}, status=403)
 
         token = create_token(user["id"], user["username"])
-        return web.json_response({
+        resp = web.json_response({
             "access_token": token,
             "token_type": "bearer",
             "user": {
@@ -53,6 +53,17 @@ def setup_api_routes(server):
                 "is_admin": bool(user["is_admin"]),
             },
         })
+        # Set cookie so ComfyUI frontend axios requests are auto-authenticated
+        import time as _time
+        from .auth import TOKEN_EXPIRY as _TOKEN_EXPIRY
+        resp.set_cookie(
+            "mt_token", token,
+            max_age=_TOKEN_EXPIRY,
+            path="/",
+            httponly=False,  # JS reads it for explicit headers too
+            samesite="Lax",
+        )
+        return resp
 
     @server.routes.post("/api/mt/auth/register")
     async def register(request):
@@ -281,7 +292,8 @@ def setup_api_routes(server):
             return web.json_response({"detail": "未登录"}, status=401)
 
         workflow_id = request.match_info["workflow_id"]
-        count = await delete_preview_images(user["id"], workflow_id)
+        from .previews import cleanup_preview_files
+        count = await cleanup_preview_files(user["id"], workflow_id)
         return web.json_response({"status": "deleted", "count": count})
 
     # ── Admin Routes ──

@@ -72,12 +72,21 @@ def _b64decode(data: str) -> str:
 
 
 async def get_user_from_request(request: web.Request) -> dict | None:
-    """Extract authenticated user from request. Returns None if not authenticated."""
+    """Extract authenticated user from request. Returns None if not authenticated.
+
+    Token sources (in priority order):
+    1. Authorization: Bearer <token> header
+    2. mt_token cookie (set on login — ComfyUI frontend axios auto-sends cookies)
+    3. ?token= query param (legacy/websocket)
+    """
     auth_header = request.headers.get("Authorization", "")
     token = ""
     if auth_header.startswith("Bearer "):
         token = auth_header[7:]
     else:
+        # Try cookie (axios/fetch auto-send same-origin cookies)
+        token = request.cookies.get("mt_token", "")
+    if not token:
         token = request.query.get("token", "")
     if not token:
         return None

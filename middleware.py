@@ -1,35 +1,74 @@
-"""Auth middleware + frontend injection for ComfyUI."""
+"""Auth middleware + frontend injection for ComfyUI.
+
+Strategy:
+- ComfyUI's native frontend (axios) needs many /api/* endpoints to function
+  (userdata, settings, object_info, system_stats, history, queue, etc.).
+  Locking all of them breaks the UI.
+- So we only REQUIRE auth for:
+    * The main page `/` (serve login page when unauthenticated)
+    * Admin-only endpoints (/api/mt/admin/*)
+    * Model/template management endpoints (hidden from non-admin users)
+    * Workflow execution endpoints (prompt/queue — prevent unauthenticated compute)
+- Everything else passes through; authenticated users' requests carry their
+  identity via mt_token cookie (set at login).
+"""
 
 import json
 import logging
 from aiohttp import web
 
-from .auth import get_user_from_request, verify_token
+from .auth import get_user_from_request
 
 logger = logging.getLogger(__name__)
 
-# Routes that don't require authentication
+# Routes that never require auth
 _PUBLIC_PATHS = {
-    "/",
-    "/index.html",
     "/favicon.ico",
     "/api/mt/auth/login",
     "/api/mt/auth/register",
     "/api/mt/health",
+    "/api/extensions",  # ComfyUI extension list (needed by frontend to load our JS)
+    "/api/system_stats",
 }
 
-# Path prefixes that don't require authentication (static assets, ComfyUI core)
+# Path prefixes that never require auth (static assets, ComfyUI core read-only)
 _PUBLIC_PREFIXES = (
     "/assets/",
     "/extensions/",
     "/web/",
-    "/api/view",  # ComfyUI image view (protected separately by preview logic)
-    "/ws",        # WebSocket (protected by token in query)
+    "/fonts/",
+    "/api/view",       # ComfyUI image view
+    "/api/userdata",   # user's own data (workflows, settings) — needed by frontend
+    "/api/user",       # user info (multi-user detection)
+    "/api/settings",   # user settings
+    "/api/object_info",# node definitions
+    "/api/external",   # external resource info
+    "/api/experiments",
+    "/api/feature_flags",
+    "/api/workflow_templates",
+    "/api/models",     # model list — actually restricted below, keep public for now
+)
+
+# Execution/admin endpoints — require authentication
+_AUTH_REQUIRED_PREFIXES = (
+    "/api/prompt",      # submit workflow execution
+    "/api/queue",       # queue management
+    "/api/history",     # history
+    "/api/interrupt",
+    "/api/free",
+    "/api/mt/admin/",   # admin endpoints
+)
+
+# Model/template management — hidden from non-admin users
+_RESTRICTED_FOR_USER_PREFIXES = (
+    "/api/models",
+    "/api/model_",
+    "/api/templates",
+    "/api/userdata/models",
 )
 
 
 def _is_public_path(path: str) -> bool:
-    """Check if a path is public (no auth required)."""
     if path in _PUBLIC_PATHS:
         return True
     for prefix in _PUBLIC_PREFIXES:
@@ -38,9 +77,18 @@ def _is_public_path(path: str) -> bool:
     return False
 
 
-def _is_admin_path(path: str) -> bool:
-    """Check if a path requires admin privileges."""
-    return path.startswith("/api/mt/admin/")
+def _requires_auth(path: str) -> bool:
+    for prefix in _AUTH_REQUIRED_PREFIXES:
+        if path.startswith(prefix):
+            return True
+    return False
+
+
+def _is_restricted_for_user(path: str) -> bool:
+    for prefix in _RESTRICTED_FOR_USER_PREFIXES:
+        if path.startswith(prefix):
+            return True
+    return False
 
 
 def setup_middleware(server):
@@ -50,28 +98,39 @@ def setup_middleware(server):
     async def auth_middleware(request: web.Request, handler):
         path = request.path
 
-        # Public paths pass through
-        if _is_public_path(path):
+        # Public paths pass through (no auth needed)
+        if _is_public_path(path) and not _requires_auth(path):
             return await handler(request)
 
-        # Check authentication
+        # Authenticate
         user = await get_user_from_request(request)
-        if not user:
-            # For API requests, return 401 JSON
-            if path.startswith("/api/"):
+
+        # Main page: serve login page if not authenticated
+        if path in ("/", "/index.html"):
+            if not user:
+                return await _serve_login_page(request)
+            return await handler(request)
+
+        # Execution endpoints require auth
+        if _requires_auth(path):
+            if not user:
                 return web.json_response({"detail": "未登录"}, status=401)
-            # For page requests, serve login page
-            return await _serve_login_page(request)
+            if not user.get("is_active", True):
+                return web.json_response({"detail": "用户已被禁用"}, status=403)
 
-        if not user.get("is_active", True):
-            return web.json_response({"detail": "用户已被禁用"}, status=403)
+        # Admin endpoints require admin
+        if path.startswith("/api/mt/admin/") and not user:
+            return web.json_response({"detail": "未登录"}, status=401)
+        if path.startswith("/api/mt/admin/") and not user.get("is_admin", False):
+            return web.json_response({"detail": "需要管理员权限"}, status=403)
 
-        # Admin path check
-        if _is_admin_path(path) and not user.get("is_admin", False):
+        # Model/template endpoints restricted for non-admin
+        if _is_restricted_for_user(path) and user is not None and not user.get("is_admin", False):
             return web.json_response({"detail": "需要管理员权限"}, status=403)
 
         # Attach user to request for downstream handlers
-        request["mt_user"] = user
+        if user:
+            request["mt_user"] = user
         return await handler(request)
 
     # Register middleware (must be added before routes)
@@ -84,16 +143,3 @@ async def _serve_login_page(request: web.Request) -> web.Response:
     from .frontend import get_login_page_html
     html = get_login_page_html()
     return web.Response(text=html, content_type="text/html")
-
-
-def inject_frontend_overrides(server):
-    """Inject frontend overrides into ComfyUI's index.html response.
-
-    This intercepts the main page and injects our CSS/JS to:
-    - Hide Models/Templates/Console/Settings for non-admin users
-    - Replace Settings with user menu
-    - Add workflow management UI
-    """
-    # We do this by patching the existing index route
-    # ComfyUI serves index.html from its web root
-    pass  # Handled by web/ extension auto-loading

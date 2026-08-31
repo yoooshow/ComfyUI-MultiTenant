@@ -1,194 +1,192 @@
-// ComfyUI Multi-Tenant Frontend Extension v2
-// Auto-loaded by ComfyUI from web/ directory
-// Handles: role-based UI hiding, user menu (replaces Settings), workflow badges, preview persistence
+// ComfyUI Multi-Tenant Frontend Extension v3
+// Auto-loaded by ComfyUI from web/ directory.
+// Strategy: never touch DOM at module top-level (ComfyUI dynamic-imports
+// extensions before Vue mounts). All DOM work happens after init() on
+// DOMContentLoaded + MutationObserver retry. User menu mounts at the
+// bottom of the native sidebar account area (does NOT replace Settings).
 
 (function() {
   'use strict';
 
   const MT_API = '/api/mt';
   let mtUser = null;
-  let mtToken = localStorage.getItem('mt_token');
+  let mtToken = null;
   let hideApplied = false;
+  let menuMounted = false;
+  let bootMarker = null;
+
+  // ── Boot marker (diagnostic; only added once DOM exists) ──
+  function addBootMarker(text) {
+    try {
+      if (!bootMarker) {
+        bootMarker = document.createElement('div');
+        bootMarker.id = 'mt-boot-marker';
+        bootMarker.style.cssText = 'position:fixed;top:0;left:0;z-index:99999;background:#4f6ef7;color:#fff;font-size:10px;padding:2px 6px;border-radius:0 0 4px 0;pointer-events:none;';
+        document.documentElement.appendChild(bootMarker);
+      }
+      bootMarker.textContent = text;
+    } catch(e) {}
+  }
 
   // ── Auth Helpers ──
+  function getToken() {
+    if (mtToken) return mtToken;
+    try { mtToken = localStorage.getItem('mt_token') || ''; } catch(e) { mtToken = ''; }
+    return mtToken;
+  }
+
   function getAuthHeaders() {
-    return mtToken ? { 'Authorization': 'Bearer ' + mtToken } : {};
+    const t = getToken();
+    return t ? { 'Authorization': 'Bearer ' + t } : {};
   }
 
   async function fetchUser() {
-    if (!mtToken) return null;
+    const t = getToken();
+    if (!t) return null;
     try {
       const r = await fetch(MT_API + '/auth/me', { headers: getAuthHeaders() });
       if (r.ok) {
         mtUser = await r.json();
-        localStorage.setItem('mt_user', JSON.stringify(mtUser));
+        try { localStorage.setItem('mt_user', JSON.stringify(mtUser)); } catch(e) {}
         return mtUser;
       } else {
-        // Token expired or invalid — redirect to login
-        localStorage.removeItem('mt_token');
-        localStorage.removeItem('mt_user');
-        mtToken = null;
-        window.location.reload();
+        // Token invalid — let middleware redirect to login page on next nav
+        try {
+          localStorage.removeItem('mt_token');
+          localStorage.removeItem('mt_user');
+        } catch(e) {}
+        mtToken = '';
+        return null;
       }
-    } catch(e) { console.error('[MT] fetchUser error:', e); }
-    return null;
+    } catch(e) {
+      console.error('[MT] fetchUser error:', e);
+      return null;
+    }
   }
 
   // ── UI Overrides ──
-  // Confirmed selectors from ComfyUI frontend 1.51.9 source:
-  //   model-library -> [data-testid="model-library-tab-button"]
-  //   templates     -> .templates-tab-button
-  //   console       -> SidebarBottomPanelToggleButton (icon ph--terminal-bold)
-  //   settings      -> SidebarSettingsButton (icon lucide--settings) — replaced with user menu
-  //   shortcuts     -> SidebarShortcutsToggleButton (icon lucide--keyboard)
-  //   ComfyUI Manager -> (installed separately, hidden via .comfyui-manager-button or [data-testid])
-
+  // Non-admin users see a restricted sidebar. Admin sees everything.
   const HIDDEN_SELECTORS = [
-    // Model library (模型库)
-    '[data-testid="model-library-tab-button"]',
-    // Templates (模板)
-    '.templates-tab-button',
-    // Console / bottom panel toggle (控制台)
-    '.side-bar-button-icon.icon-\\[ph--terminal-bold\\]',
-    // Shortcuts panel (快捷键 — kept for admins, hidden for users)
-    '.side-bar-button-icon.icon-\\[lucide--keyboard\\]',
-    // ComfyUI Manager button (右上角 管理扩展功能)
-    '.comfyui-manager-button',
+    '[data-testid="model-library-tab-button"]', // 模型库
+    '.templates-tab-button',                    // 模板
+    '.side-bar-button-icon[class*="ph--terminal-bold"]', // 控制台
+    '.side-bar-button-icon[class*="lucide--keyboard"]',  // 快捷键
+    '.comfyui-manager-button',                  // ComfyUI Manager
     '[data-testid="manager-button"]',
     '.manager-button',
     '#comfyui-manager-button',
+    '[class*="manager"][class*="button"]',
   ];
 
-  const USER_VISIBLE_SELECTORS = [
-    // Node library (节点库) — users need this to build workflows
-    '[data-testid="node-library-tab-button"]',
-    // Workflows (工作流) — users need this
-    '[data-testid="workflows-tab-button"]',
-  ];
-
-  function hideFeaturesForUser() {
-    if (!mtUser) return;
-    if (hideApplied) return;
-    hideApplied = true;
-
-    if (mtUser.is_admin) {
-      console.log('[MT] Admin mode — all features visible');
-      return;
-    }
-
-    console.log('[MT] User mode — hiding features for', mtUser.username);
-
-    // Hide specified buttons
+  function applyHidden() {
     HIDDEN_SELECTORS.forEach(sel => {
-      document.querySelectorAll(sel).forEach(el => {
-        el.style.display = 'none';
-        el.classList.add('mt-hidden');
-      });
-    });
-
-    // Replace settings button with user menu
-    replaceSettingsWithUserMenu();
-
-    // Watch for dynamic re-renders (Vue may re-create DOM)
-    const observer = new MutationObserver(() => {
-      HIDDEN_SELECTORS.forEach(sel => {
+      try {
         document.querySelectorAll(sel).forEach(el => {
           if (!el.classList.contains('mt-hidden')) {
             el.style.display = 'none';
             el.classList.add('mt-hidden');
           }
         });
-      });
+      } catch(e) {}
     });
-    observer.observe(document.body, { childList: true, subtree: true });
   }
 
-  function replaceSettingsWithUserMenu() {
-    // Find the settings button (SidebarIcon with lucide--settings icon in bottom toolbar)
-    const settingsBtn = document.querySelector('.side-bar-button-icon.icon-\\[lucide--settings\\]')?.closest('button, .comfy-menu-button-wrapper, div');
-    const bottomToolbar = document.querySelector('.side-tool-bar-container [class*="mt-auto"], .side-tool-bar-container > div:last-child');
+  function hideFeaturesForUser() {
+    if (!mtUser) return;
+    hideApplied = true;
 
-    if (!settingsBtn) {
-      console.log('[MT] Settings button not found, adding user menu to bottom toolbar');
-      if (bottomToolbar) {
-        bottomToolbar.appendChild(createUserMenuButton());
-      }
+    if (mtUser.is_admin) {
+      console.log('[MT] Admin mode — all features visible');
+      addBootMarker('MT admin ✓');
       return;
     }
 
-    // Replace settings with user menu button
-    const userBtn = createUserMenuButton();
-    if (settingsBtn.parentNode) {
-      settingsBtn.parentNode.replaceChild(userBtn, settingsBtn);
+    console.log('[MT] User mode — hiding features for', mtUser.username);
+    applyHidden();
+    addBootMarker('MT user ✓');
+  }
+
+  // ── User menu at the native sidebar account area ──
+  // ComfyUI renders the bottom toolbar with .mt-auto; the account/logout icon
+  // normally lives at the bottom. We mount our user button right there.
+  function ensureUserMenuPresent() {
+    if (menuMounted || !mtUser) return;
+
+    // Locate the bottom toolbar of the sidebar
+    const bottomToolbar = document.querySelector('.side-tool-bar-container [class*="mt-auto"], .side-tool-bar-container > div:last-child');
+    if (!bottomToolbar) {
+      addBootMarker('MT: toolbar missing, retry');
+      return; // MutationObserver will retry
     }
+
+    // Insert as the LAST item of bottom toolbar (native account position)
+    const userBtn = createUserMenuButton();
+    bottomToolbar.appendChild(userBtn);
+    menuMounted = true;
+    addBootMarker('MT: menu mounted ✓');
+    console.log('[MT] User menu mounted at sidebar account area');
   }
 
   function createUserMenuButton() {
     const btn = document.createElement('button');
     btn.className = 'mt-user-btn comfy-menu-button-wrapper flex shrink-0 cursor-pointer flex-col items-center justify-center p-2 transition-colors';
-    btn.style.cssText = 'color: var(--fg-color, #e0e0e0); background: none; border: none;';
+    btn.style.cssText = 'color: var(--fg-color, #e0e0e0); background: none; border: none; position: relative;';
+    btn.title = '用户菜单';
+    const initial = (mtUser?.display_name || mtUser?.username || 'U').charAt(0).toUpperCase();
     btn.innerHTML = `
       <div class="side-bar-button-content flex flex-col items-center gap-2">
         <div class="sidebar-icon-wrapper relative">
-          <div class="side-bar-button-icon icon-[lucide--user] mt-user-avatar" style="font-size:20px;line-height:1;">
-            ${mtUser?.display_name ? mtUser.display_name.charAt(0).toUpperCase() : 'U'}
-          </div>
+          <div class="side-bar-button-icon icon-[lucide--user] mt-user-avatar" style="font-size:20px;line-height:1;">${initial}</div>
         </div>
-        <div class="side-bar-button-label line-clamp-2 w-max max-w-[calc(var(--sidebar-width)-var(--sidebar-padding))] text-center text-2xs wrap-break-word whitespace-normal">
+        <div class="side-bar-button-label line-clamp-2 w-max max-w-[calc(var(--sidebar-width)-var(--sidebar-padding))] text-center text-2xs wrap-break-word whitespace-normal" style="max-width:60px;overflow:hidden;text-overflow:ellipsis;">
           ${mtUser?.display_name || mtUser?.username || '用户'}
         </div>
       </div>
     `;
-    btn.onclick = showUserMenu;
+    btn.onclick = function(e) {
+      e.stopPropagation();
+      showUserMenu(btn);
+    };
     return btn;
   }
 
-  function showUserMenu() {
+  function showUserMenu(anchor) {
     const existing = document.querySelector('.mt-user-menu');
     if (existing) { existing.remove(); return; }
 
     const menu = document.createElement('div');
     menu.className = 'mt-user-menu';
     menu.style.cssText = `
-      position: fixed;
-      bottom: 60px;
-      left: 60px;
+      position: fixed; left: 64px; bottom: 16px;
       background: var(--comfy-menu-bg, #1c1e24);
-      border: 1px solid var(--border-color, rgba(255,255,255,0.1));
-      border-radius: 8px;
-      padding: 8px 0;
-      min-width: 200px;
-      z-index: 10000;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-      color: var(--fg-color, #e0e0e0);
+      border: 1px solid var(--border-color, rgba(255,255,255,0.12));
+      border-radius: 10px; padding: 8px 0; min-width: 200px; z-index: 10002;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.5);
+      color: var(--fg-color, #e0e0e0); font-size: 13px;
     `;
     const roleText = mtUser?.is_admin ? '管理员' : '普通用户';
     menu.innerHTML = `
-      <div style="padding:8px 16px;font-size:13px;color:var(--descrip-text, #888);border-bottom:1px solid var(--border-color, rgba(255,255,255,0.08));">
-        <div style="color:var(--fg-color, #e0e0e0);font-weight:500;font-size:14px;">${mtUser?.display_name || mtUser?.username || '用户'}</div>
-        <div style="font-size:11px;margin-top:2px;">${roleText}</div>
+      <div style="padding:8px 16px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">
+        <div style="font-weight:600;font-size:14px;">${mtUser?.display_name || mtUser?.username || '用户'}</div>
+        <div style="font-size:11px;color:var(--descrip-text,#888);margin-top:2px;">${roleText} · ${mtUser?.username || ''}</div>
       </div>
-      ${mtUser?.is_admin ? '<button onclick="mtOpenAdmin()" class="mt-menu-item">管理控制台</button>' : ''}
+      ${mtUser?.is_admin ? '<button onclick="mtOpenAdmin()" class="mt-menu-item">⚙ 管理控制台</button>' : ''}
       <button onclick="mtLogout()" class="mt-menu-item" style="color:#ef4444;">退出登录</button>
     `;
 
-    // Add styles for menu items
-    const style = document.createElement('style');
-    style.textContent = `
-      .mt-menu-item {
-        width: 100%;
-        padding: 8px 16px;
-        text-align: left;
-        background: none;
-        border: none;
-        color: var(--fg-color, #e0e0e0);
-        font-size: 13px;
-        cursor: pointer;
-        transition: background 0.15s;
+    // Styles for menu items (idempotent)
+    try {
+      if (!document.getElementById('mt-menu-style')) {
+        const style = document.createElement('style');
+        style.id = 'mt-menu-style';
+        style.textContent = `
+          .mt-menu-item { width:100%; padding:9px 16px; text-align:left; background:none; border:none;
+            color:var(--fg-color,#e0e0e0); font-size:13px; cursor:pointer; transition:background .15s; }
+          .mt-menu-item:hover { background:var(--comfy-input-bg,#2a2d35); }
+        `;
+        document.head.appendChild(style);
       }
-      .mt-menu-item:hover { background: var(--comfy-input-bg, #2a2d35); }
-    `;
-    document.head.appendChild(style);
+    } catch(e) {}
 
     document.body.appendChild(menu);
 
@@ -201,6 +199,16 @@
       });
     }, 0);
   }
+
+  window.mtLogout = function() {
+    try {
+      localStorage.removeItem('mt_token');
+      localStorage.removeItem('mt_user');
+      // Clear auth cookie
+      document.cookie = 'mt_token=; Path=/; Max-Age=0';
+    } catch(e) {}
+    window.location.href = '/';
+  };
 
   window.mtOpenAdmin = function() {
     openAdminPanel();
@@ -441,66 +449,24 @@
   };
 
   // ── Workflow Type Badges ──
-  // Z&A workflows (admin-managed, shared) vs Custom workflows (per-user)
+  // NOTE: disabled — selector was too broad and mislabeled elements.
+  // Real workflow-type distinction is enforced server-side (Z&A shared vs
+  // per-user custom). A precise frontend badge can be added later once the
+  // exact workflow-list DOM structure is confirmed.
   function setupWorkflowBadges() {
-    // Fetch workflow list from our API and tag sidebar workflow entries
-    async function tagWorkflows() {
-      try {
-        const r = await fetch(MT_API + '/workflows', { headers: getAuthHeaders() });
-        if (!r.ok) return;
-        const data = await r.json();
-        const zaNames = new Set(
-          (data.items || []).filter(w => w.is_za).map(w => w.display_name || w.name)
-        );
-
-        // Find workflow sidebar items and add badges
-        document.querySelectorAll('[data-testid="workflows-tab-button"]').forEach(() => {
-          // Workflow items are in the sidebar tab content
-          setTimeout(() => {
-            document.querySelectorAll('.workflows-sidebar-item, [class*="workflow-item"], [class*="workflow-name"]').forEach(el => {
-              if (el.querySelector('.mt-wf-badge')) return;
-              const name = el.textContent.trim();
-              if (!name || name.length > 40) return;
-              const isZa = zaNames.has(name);
-              const badge = document.createElement('span');
-              badge.className = 'mt-wf-badge ' + (isZa ? 'za' : 'custom');
-              badge.textContent = isZa ? 'Z&A' : '自定义';
-              el.appendChild(badge);
-            });
-          }, 500);
-        });
-      } catch(e) {
-        console.error('[MT] Failed to fetch workflows:', e);
-      }
-    }
-
-    // Run on load and periodically (Vue re-renders)
-    setTimeout(tagWorkflows, 1000);
-    setInterval(tagWorkflows, 5000);
+    // Intentionally no-op for now
   }
 
   // ── Preview Image Persistence ──
-  // PreviewImage node outputs persist across restart/refresh.
-  // Backend stores references in DB; cleanup happens when workflow tab is closed.
   function setupPreviewPersistence() {
-    // When workflow closes, tell backend to clean up its previews.
-    // ComfyUI's app dispatches events on workflow open/close — hook into those.
-    const api = window.api;
-    if (!api) return;
-
-    // Wrap fetch to detect workflow deletion
     const originalFetch = window.fetch;
     window.fetch = function(...args) {
       const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
       const method = (args[1]?.method || 'GET').toUpperCase();
-
-      // Detect workflow deletion (DELETE /workflows/... or /api/workflows/...)
       if (method === 'DELETE' && (url.includes('/workflows/') || url.includes('/api/workflows/'))) {
-        // Extract workflow id/name from URL
         const match = url.match(/workflows\/([^/?#]+)/);
         if (match) {
           const wfId = decodeURIComponent(match[1]);
-          // Notify backend to cleanup previews (fire and forget)
           try {
             fetch(MT_API + '/previews/' + encodeURIComponent(wfId), {
               method: 'DELETE',
@@ -511,7 +477,7 @@
       }
       return originalFetch.apply(this, args);
     };
-    console.log('[MT] Preview persistence ready (workflow close cleanup hooked)');
+    console.log('[MT] Preview persistence ready');
   }
 
   // ── Initialization ──
@@ -522,8 +488,9 @@
     // Fetch user
     await fetchUser();
     if (!mtUser) {
-      // Not logged in — middleware serves login page on refresh; if we got here, force reload
+      // Not logged in — middleware serves login page; force reload if somehow here
       if (!document.querySelector('.login-card')) {
+        addBootMarker('MT: no auth, reload');
         window.location.reload();
       }
       return;
@@ -531,16 +498,32 @@
 
     // Apply overrides
     hideFeaturesForUser();
+    ensureUserMenuPresent();
     setupWorkflowBadges();
     setupPreviewPersistence();
+
+    // Watch for Vue re-renders: re-hide + re-mount menu
+    const observer = new MutationObserver(() => {
+      if (mtUser && !mtUser.is_admin) applyHidden();
+      if (mtUser) ensureUserMenuPresent();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
 
     console.log('[MT] Initialized for:', mtUser.username, mtUser.is_admin ? '(admin)' : '(user)');
   }
 
-  // Start when DOM ready
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
+  // Start only after DOM exists
+  function start() {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', start);
+      return;
+    }
+    addBootMarker('MT loading...');
+    init().catch(e => {
+      console.error('[MT] init error:', e);
+      addBootMarker('MT error: ' + (e && e.message ? e.message : e));
+    });
   }
+
+  start();
 })();

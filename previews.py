@@ -180,8 +180,15 @@ def _persist_results(self, results, images, prompt, extra_pnginfo) -> dict:
             if not os.path.isfile(src):
                 continue
 
-            # Destination: previews/{user_id}/{workflow_id}/{filename}
-            dest_dir = os.path.join(preview_dir, str(user_id), str(workflow_id))
+            # Destination: output/mt_previews/{user_id}/{workflow_id}/{filename}
+            # Living in the output dir means the native /view?type=output
+            # endpoint can serve it — the frontend restore path just writes
+            # {filename, subfolder, type:'output'} into nodeOutputs and the
+            # native image URL builder loads it. No custom image API needed.
+            from folder_paths import get_output_directory
+            dest_dir = os.path.join(
+                get_output_directory(), "mt_previews", str(user_id), str(workflow_id)
+            )
             os.makedirs(dest_dir, exist_ok=True)
             dest = os.path.join(dest_dir, filename)
 

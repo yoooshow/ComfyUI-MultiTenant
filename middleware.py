@@ -33,6 +33,7 @@ _PUBLIC_PATHS = {
 
 # Path prefixes that never require auth (static assets, ComfyUI core read-only)
 _PUBLIC_PREFIXES = (
+    "/ws",           # WebSocket (ComfyUI realtime: executing/b_preview/executed)
     "/assets/",
     "/extensions/",
     "/web/",

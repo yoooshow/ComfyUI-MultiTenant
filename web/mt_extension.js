@@ -506,26 +506,48 @@
                null;
       } catch(e) {}
 
-      // Match previews to this workflow
-      const wfPreviews = previews.filter(p => p.workflow_id === wfId);
-      if (!wfPreviews.length) return;
-
-      // Find PreviewImage nodes in current graph
+      // Match previews to this workflow. If the graph has no stable id yet
+      // (fresh unsaved workflow), fall back to ANY persisted preview for the
+      // matching node ids — this covers "workflow was renamed" and
+      // "unsaved but previously executed" cases.
+      let wfPreviews = wfId ? previews.filter(p => p.workflow_id === wfId) : [];
       const graph = app?.graph || app?.rootGraph;
       if (!graph) return;
       const previewNodes = graph._nodes.filter(n => (n.type || '').includes('PreviewImage'));
       if (!previewNodes.length) return;
 
+      // If no workflow-id match, match purely by node_id across this user's
+      // previews (latest first). This still guarantees each node only gets
+      // its OWN image — never another node's.
+      if (!wfPreviews.length) {
+        const nodeIds = new Set(previewNodes.map(n => String(n.id)));
+        wfPreviews = previews.filter(p => nodeIds.has(String(p.node_id)));
+      }
+
       // Build preview URL for each node. ONLY exact node_id match — a
       // PreviewImage node that never ran must NOT get another node's image.
-      if (!app.nodePreviewImages) app.nodePreviewImages = {};
+      //
+      // We write to app.nodeOutputs (NOT nodePreviewImages) because the
+      // native frontend reads nodeOutputs for the fallback image URL builder
+      // (buildImageUrls -> /view?type=output), and app.nodeOutputs has a
+      // setter that syncs into the Pinia store automatically. Persisted
+      // previews live in the output dir, so the native /view endpoint can
+      // serve them — no blob/URL management needed.
+      const outputDir = 'mt_previews/' + mtUser.id + '/' + encodeURIComponent(wfId || 'default');
       previewNodes.forEach((node) => {
         const locatorId = String(node.id);
         const p = wfPreviews.find(x => String(x.node_id) === locatorId);
         if (!p) return; // no persisted preview for THIS node — leave empty
-        const url = MT_API + '/previews/' + encodeURIComponent(p.workflow_id) + '/img/' + encodeURIComponent(p.filename);
-        app.nodePreviewImages[locatorId] = [url];
-        console.log('[MT] Restored preview for node', locatorId, '->', url);
+        const sub = 'mt_previews/' + mtUser.id + '/' + p.workflow_id;
+        if (!app.nodeOutputs) app.nodeOutputs = {};
+        app.nodeOutputs[locatorId] = {
+          images: [{ filename: p.filename, subfolder: sub, type: 'output' }]
+        };
+        // Force the store to pick it up via the legacy bridge
+        try {
+          app.nodeOutputs = { ...app.nodeOutputs };
+        } catch(e) {}
+        console.log('[MT] Restored preview for node', locatorId, '->', sub + '/' + p.filename);
       });
 
       // Refresh node display
@@ -560,6 +582,47 @@
     setupPreviewPersistence();
     // Restore persisted previews after ComfyUI app is ready
     setTimeout(restorePreviewImages, 2500);
+
+    // Re-restore previews whenever a workflow is loaded/switched —
+    // ComfyUI calls app.loadGraphData(data, ...) on workflow load.
+    try {
+      const app = window.app;
+      if (app && typeof app.loadGraphData === 'function') {
+        const origLoad = app.loadGraphData.bind(app);
+        app.loadGraphData = function(...args) {
+          const ret = origLoad(...args);
+          // Wait for graph configure to settle, then restore previews
+          setTimeout(restorePreviewImages, 800);
+          return ret;
+        };
+        console.log('[MT] loadGraphData hooked (preview restore on workflow switch)');
+      }
+    } catch(e) {
+      console.error('[MT] loadGraphData hook error:', e);
+    }
+
+    // DIAGNOSTIC: watch store state after executions
+    try {
+      const app = window.app;
+      if (app && app.api && app.api.addEventListener) {
+        app.api.addEventListener('executed', (evt) => {
+          try {
+            const d = evt?.detail || {};
+            document.title = '[MT-diag] executed node=' + (d.node ?? d.display_node) + ' output=' + JSON.stringify(d.output || {}).slice(0, 120);
+          } catch(e) {}
+        });
+        app.api.addEventListener('execution_success', () => {
+          try {
+            const st = app.nodePreviewImages ? Object.keys(app.nodePreviewImages).length : -1;
+            const st2 = app.nodeOutputs ? Object.keys(app.nodeOutputs).length : -1;
+            document.title = '[MT-diag] success previews=' + st + ' outputs=' + st2;
+          } catch(e) {}
+        });
+        console.log('[MT] diagnostic listeners registered');
+      }
+    } catch(e) {
+      console.error('[MT] diag error:', e);
+    }
 
     // Watch for Vue re-renders: re-hide + re-mount menu
     const observer = new MutationObserver(() => {

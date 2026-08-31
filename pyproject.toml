@@ -1,0 +1,15 @@
+[project]
+name = "comfyui-mt"
+version = "0.1.0"
+description = "ComfyUI Multi-Tenant Plugin — zero core modification"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+
+[project.urls]
+Repository = "https://github.com/yoooshow/ComfyUI-MultiTenant"
+
+[tool.comfy]
+PublisherId = "yoooshow"
+DisplayName = "ComfyUI Multi-Tenant"
+Icon = ""

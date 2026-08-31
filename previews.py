@@ -73,6 +73,30 @@ def setup_preview_persistence(server) -> None:
         except Exception:
             pass
 
+        # Register on_prompt handler to inject mt_user_id into extra_pnginfo,
+        # so preview persistence knows which user generated each image.
+        def on_prompt(json_data):
+            try:
+                from .auth import verify_token
+                # Extract user from the request context (set by middleware)
+                user = getattr(server, "_mt_current_user", None)
+                if user:
+                    extra_data = json_data.setdefault("extra_data", {})
+                    extra_pnginfo = extra_data.setdefault("extra_pnginfo", {})
+                    extra_pnginfo["mt_user_id"] = str(user["id"])
+                    # Ensure workflow id is present for preview grouping
+                    if "workflow" not in extra_pnginfo:
+                        extra_pnginfo["workflow"] = {}
+            except Exception as e:
+                logger.error(f"[ComfyUI-MT] on_prompt inject failed: {e}")
+            return json_data
+
+        try:
+            server.add_on_prompt_handler(on_prompt)
+            logger.info("[ComfyUI-MT] on_prompt handler registered (mt_user_id injection)")
+        except Exception as e:
+            logger.error(f"[ComfyUI-MT] add_on_prompt_handler failed: {e}")
+
     except Exception as e:
         logger.error(f"[ComfyUI-MT] Failed to setup preview persistence: {e}")
         import traceback
@@ -100,11 +124,21 @@ def _persist_results(self, results, images, prompt, extra_pnginfo) -> dict:
     except Exception:
         pass
 
-    # Extract workflow id from prompt
+    # If no valid user id (0 = unknown), still persist files but skip DB row
+    # (FOREIGN KEY would fail). Files go under previews/0/ for cleanup-by-age.
+    valid_user = user_id > 0
+
+    # Extract workflow id from prompt — ComfyUI frontend stores it at
+    # extra_pnginfo.workflow.id (from the workflow's saved id).
     workflow_id = "default"
     try:
         if extra_pnginfo and isinstance(extra_pnginfo, dict):
-            workflow_id = str(extra_pnginfo.get("workflow_id") or extra_pnginfo.get("workflow_name") or "default")
+            wf = extra_pnginfo.get("workflow") or {}
+            wf_id = wf.get("id") or wf.get("name") or ""
+            if wf_id:
+                workflow_id = str(wf_id)
+            else:
+                workflow_id = str(extra_pnginfo.get("workflow_name") or "default")
     except Exception:
         pass
 
@@ -135,16 +169,20 @@ def _persist_results(self, results, images, prompt, extra_pnginfo) -> dict:
             if not os.path.exists(dest) or os.path.getmtime(src) > os.path.getmtime(dest):
                 shutil.copy2(src, dest)
 
-            # Record in DB (sync)
-            node_id = "preview"
-            db.execute(
-                """INSERT INTO preview_images (user_id, workflow_id, node_id, filename, file_path)
-                   VALUES (?,?,?,?,?)
-                   ON CONFLICT(user_id, workflow_id, node_id) DO UPDATE SET
-                   filename=excluded.filename, file_path=excluded.file_path, created_at=datetime('now')""",
-                (user_id, workflow_id, node_id, filename, dest)
-            )
-            db.commit()
+            # Record in DB (sync) — only when we have a real user id
+            if valid_user:
+                node_id = "preview"
+                try:
+                    db.execute(
+                        """INSERT INTO preview_images (user_id, workflow_id, node_id, filename, file_path)
+                           VALUES (?,?,?,?,?)
+                           ON CONFLICT(user_id, workflow_id, node_id) DO UPDATE SET
+                           filename=excluded.filename, file_path=excluded.file_path, created_at=datetime('now')""",
+                        (user_id, workflow_id, node_id, filename, dest)
+                    )
+                    db.commit()
+                except Exception as e:
+                    logger.error(f"[ComfyUI-MT] Preview DB record failed: {e}")
 
             persisted.append({
                 "filename": filename,

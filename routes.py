@@ -300,6 +300,39 @@ def setup_api_routes(server):
         previews = await get_preview_images(user["id"], workflow_id)
         return web.json_response({"items": previews})
 
+    @server.routes.get("/api/mt/previews/{workflow_id}/img/{filename}")
+    async def get_preview_image(request):
+        """Serve a persisted preview image file (auth required)."""
+        user = await get_user_from_request(request)
+        if not user:
+            return web.json_response({"detail": "未登录"}, status=401)
+
+        workflow_id = request.match_info["workflow_id"]
+        filename = request.match_info["filename"]
+        import urllib.parse
+        filename = urllib.parse.unquote(filename)
+
+        # Path safety: filename must be a bare filename (no path traversal)
+        if "/" in filename or "\\" in filename or ".." in filename:
+            return web.json_response({"detail": "Invalid filename"}, status=400)
+
+        previews = await get_preview_images(user["id"], workflow_id)
+        for p in previews:
+            if p["filename"] == filename:
+                try:
+                    if not os.path.isfile(p["file_path"]):
+                        return web.json_response({"detail": "文件不存在"}, status=404)
+                    with open(p["file_path"], "rb") as f:
+                        data = f.read()
+                    import mimetypes
+                    ctype = mimetypes.guess_type(filename)[0] or "image/png"
+                    return web.Response(body=data, content_type=ctype)
+                except Exception as e:
+                    logger.error(f"[ComfyUI-MT] Preview image serve failed: {e}")
+                    return web.json_response({"detail": "读取失败"}, status=500)
+
+        return web.json_response({"detail": "预览图不存在"}, status=404)
+
     @server.routes.delete("/api/mt/previews/{workflow_id}")
     async def delete_previews(request):
         """Delete all preview images for a workflow (when tab closed)."""

@@ -131,6 +131,11 @@ def setup_middleware(server):
         # Attach user to request for downstream handlers
         if user:
             request["mt_user"] = user
+            # Also stash on server for on_prompt handlers (which lack request context)
+            try:
+                server._mt_current_user = user
+            except Exception:
+                pass
         return await handler(request)
 
     # Register middleware (must be added before routes)

@@ -203,98 +203,241 @@
   }
 
   window.mtOpenAdmin = function() {
-    // Open admin panel (simple user management) — opens in modal
-    fetchAdminUsers();
+    openAdminPanel();
   };
 
-  window.mtLogout = function() {
-    localStorage.removeItem('mt_token');
-    localStorage.removeItem('mt_user');
-    window.location.reload();
-  };
+  // ── Admin Management Panel (3 tabs: Users / Z&A Workflows / All Workflows) ──
+  let adminTab = 'users';
+  let adminData = null;
 
-  // ── Admin User Management Panel ──
-  async function fetchAdminUsers() {
+  async function openAdminPanel(tab) {
+    if (tab) adminTab = tab;
+    document.querySelector('.mt-admin-panel')?.remove();
+    await loadAdminData();
+    renderAdminPanel();
+  }
+
+  async function loadAdminData() {
     try {
-      const r = await fetch(MT_API + '/admin/users', { headers: getAuthHeaders() });
-      if (!r.ok) {
+      const [usersR, wfR] = await Promise.all([
+        fetch(MT_API + '/admin/users', { headers: getAuthHeaders() }),
+        fetch(MT_API + '/admin/workflows', { headers: getAuthHeaders() })
+      ]);
+      if (!usersR.ok || !wfR.ok) {
         alert('无管理员权限');
+        adminData = null;
         return;
       }
-      const data = await r.json();
-      showAdminPanel(data.items || []);
+      adminData = {
+        users: (await usersR.json()).items || [],
+        workflows: (await wfR.json()).items || []
+      };
     } catch(e) {
-      alert('加载用户列表失败');
+      alert('加载管理数据失败');
+      adminData = null;
     }
   }
 
-  function showAdminPanel(users) {
-    // Close existing
-    document.querySelector('.mt-admin-panel')?.remove();
+  function renderAdminPanel() {
+    if (!adminData) return;
+    const { users, workflows } = adminData;
+    const zaWorkflows = workflows.filter(w => w.is_za);
+    const userWorkflows = workflows.filter(w => !w.is_za);
 
     const panel = document.createElement('div');
     panel.className = 'mt-admin-panel';
     panel.style.cssText = `
-      position: fixed;
-      inset: 0;
-      z-index: 10001;
-      background: rgba(0,0,0,0.5);
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      position: fixed; inset: 0; z-index: 10001;
+      background: rgba(0,0,0,0.55);
+      display: flex; align-items: center; justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", sans-serif;
     `;
     panel.innerHTML = `
-      <div style="background:var(--comfy-menu-bg,#1c1e24);border:1px solid var(--border-color,rgba(255,255,255,0.1));border-radius:12px;padding:24px;width:600px;max-width:90vw;max-height:80vh;overflow:auto;color:var(--fg-color,#e0e0e0);">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-          <h2 style="font-size:18px;font-weight:600;margin:0;">用户管理</h2>
-          <button onclick="document.querySelector('.mt-admin-panel').remove()" style="background:none;border:none;color:var(--descrip-text,#888);font-size:20px;cursor:pointer;">✕</button>
+      <div style="background:var(--comfy-menu-bg,#1c1e24);border:1px solid var(--border-color,rgba(255,255,255,0.12));border-radius:14px;width:760px;max-width:94vw;max-height:86vh;display:flex;flex-direction:column;color:var(--fg-color,#e0e0e0);box-shadow:0 24px 80px rgba(0,0,0,0.5);">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">
+          <h2 style="font-size:17px;font-weight:600;margin:0;">管理控制台</h2>
+          <button onclick="document.querySelector('.mt-admin-panel').remove()" style="background:none;border:none;color:var(--descrip-text,#888);font-size:20px;cursor:pointer;line-height:1;">✕</button>
         </div>
-        <table style="width:100%;border-collapse:collapse;font-size:13px;">
-          <thead>
-            <tr style="color:var(--descrip-text,#888);text-align:left;">
-              <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">用户名</th>
-              <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">显示名</th>
-              <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">角色</th>
-              <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">状态</th>
-              <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${users.map(u => `
-              <tr>
-                <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));">${u.username}</td>
-                <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));">${u.display_name || '-'}</td>
-                <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));">${u.is_admin ? '管理员' : '用户'}</td>
-                <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));">${u.is_active ? '✅ 激活' : '⛔ 禁用'}</td>
-                <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));">
-                  ${u.username !== '15096756699' ? `<button onclick="mtToggleUser(${u.id})" style="padding:3px 10px;background:${u.is_active ? '#ef4444' : '#10b981'};border:none;border-radius:4px;color:#fff;font-size:12px;cursor:pointer;">${u.is_active ? '禁用' : '启用'}</button>` : '<span style="color:#888;font-size:11px;">主管理员</span>'}
-                </td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
+        <div style="display:flex;gap:4px;padding:10px 20px 0;">
+          <button onclick="mtAdminTab('users')" style="padding:7px 16px;border:none;border-radius:8px 8px 0 0;font-size:13px;cursor:pointer;${adminTab==='users' ? 'background:var(--comfy-input-bg,#2a2d35);color:var(--fg-color,#e0e0e0);font-weight:600;' : 'background:none;color:var(--descrip-text,#888);'}">用户管理 (${users.length})</button>
+          <button onclick="mtAdminTab('za')" style="padding:7px 16px;border:none;border-radius:8px 8px 0 0;font-size:13px;cursor:pointer;${adminTab==='za' ? 'background:var(--comfy-input-bg,#2a2d35);color:var(--fg-color,#e0e0e0);font-weight:600;' : 'background:none;color:var(--descrip-text,#888);'}">Z&A 共享 (${zaWorkflows.length})</button>
+          <button onclick="mtAdminTab('all')" style="padding:7px 16px;border:none;border-radius:8px 8px 0 0;font-size:13px;cursor:pointer;${adminTab==='all' ? 'background:var(--comfy-input-bg,#2a2d35);color:var(--fg-color,#e0e0e0);font-weight:600;' : 'background:none;color:var(--descrip-text,#888);'}">全部工作流 (${workflows.length})</button>
+        </div>
+        <div style="flex:1;overflow:auto;padding:16px 20px 20px;border-top:1px solid var(--border-color,rgba(255,255,255,0.08));">
+          ${adminTab === 'users' ? renderUsersTab(users) : (adminTab === 'za' ? renderZaTab(zaWorkflows) : renderAllTab(workflows))}
+        </div>
       </div>
     `;
     document.body.appendChild(panel);
   }
 
+  function renderUsersTab(users) {
+    return `
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead><tr style="color:var(--descrip-text,#888);text-align:left;">
+          <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">用户名</th>
+          <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">显示名</th>
+          <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">角色</th>
+          <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">状态</th>
+          <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">操作</th>
+        </tr></thead>
+        <tbody>
+          ${users.map(u => `
+            <tr>
+              <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));">${u.username}</td>
+              <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));">${u.display_name || '-'}</td>
+              <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));">
+                ${u.username === '15096756699' ? '<span style="color:#4f6ef7;font-weight:500;">主管理员</span>' : `<button onclick="mtSetRole(${u.id}, ${!u.is_admin})" style="padding:2px 8px;border-radius:4px;font-size:12px;cursor:pointer;border:1px solid var(--border-color,rgba(255,255,255,0.15));background:none;color:${u.is_admin ? '#4f6ef7' : 'var(--descrip-text,#888)'};">${u.is_admin ? '管理员' : '设为管理员'}</button>`}
+              </td>
+              <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));">${u.is_active ? '<span style="color:#34c759;">已激活</span>' : '<span style="color:#ff3b30;">已禁用</span>'}</td>
+              <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));">
+                ${u.username !== '15096756699' ? `<button onclick="mtToggleUser(${u.id})" style="padding:3px 10px;background:${u.is_active ? '#ff3b30' : '#34c759'};border:none;border-radius:4px;color:#fff;font-size:12px;cursor:pointer;">${u.is_active ? '禁用' : '启用'}</button>` : '<span style="color:#888;font-size:11px;">—</span>'}
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  function renderZaTab(zaWorkflows) {
+    return `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="font-size:13px;color:var(--descrip-text,#888);">Z&A 工作流为全员共享，由管理员维护</div>
+        <button onclick="mtUploadZa()" style="padding:6px 14px;background:#4f6ef7;border:none;border-radius:6px;color:#fff;font-size:13px;cursor:pointer;">+ 上传共享工作流</button>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead><tr style="color:var(--descrip-text,#888);text-align:left;">
+          <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">名称</th>
+          <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">说明</th>
+          <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">更新</th>
+          <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">操作</th>
+        </tr></thead>
+        <tbody>
+          ${zaWorkflows.length === 0 ? '<tr><td colspan="4" style="padding:20px;text-align:center;color:#888;font-size:13px;">暂无共享工作流</td></tr>' : zaWorkflows.map(w => `
+            <tr>
+              <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));"><span style="color:#4f6ef7;font-size:11px;padding:1px 6px;border-radius:3px;background:rgba(79,110,247,0.15);margin-right:6px;">Z&A</span>${w.display_name || w.name}</td>
+              <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));color:var(--descrip-text,#888);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${w.description || '-'}</td>
+              <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));color:var(--descrip-text,#888);font-size:12px;">${(w.updated_at || w.created_at || '').slice(0,10)}</td>
+              <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));">
+                <button onclick="mtDeleteWf(${w.id})" style="padding:3px 10px;background:none;border:1px solid rgba(255,59,48,0.4);border-radius:4px;color:#ff3b30;font-size:12px;cursor:pointer;">删除</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  function renderAllTab(workflows) {
+    return `
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead><tr style="color:var(--descrip-text,#888);text-align:left;">
+          <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">名称</th>
+          <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">类型</th>
+          <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">归属</th>
+          <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">更新</th>
+          <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">操作</th>
+        </tr></thead>
+        <tbody>
+          ${workflows.length === 0 ? '<tr><td colspan="5" style="padding:20px;text-align:center;color:#888;font-size:13px;">暂无工作流</td></tr>' : workflows.map(w => `
+            <tr>
+              <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));">${w.display_name || w.name}</td>
+              <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));">${w.is_za ? '<span style="color:#4f6ef7;font-size:11px;padding:1px 6px;border-radius:3px;background:rgba(79,110,247,0.15);">Z&A</span>' : '<span style="color:#9ca3af;font-size:11px;padding:1px 6px;border-radius:3px;background:rgba(156,163,175,0.15);">自定义</span>'}</td>
+              <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));">${w.owner_username || '<span style="color:#4f6ef7;">全员共享</span>'}</td>
+              <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));color:var(--descrip-text,#888);font-size:12px;">${(w.updated_at || w.created_at || '').slice(0,10)}</td>
+              <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));">
+                <button onclick="mtDeleteWf(${w.id})" style="padding:3px 10px;background:none;border:1px solid rgba(255,59,48,0.4);border-radius:4px;color:#ff3b30;font-size:12px;cursor:pointer;">删除</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  window.mtAdminTab = function(tab) {
+    adminTab = tab;
+    document.querySelector('.mt-admin-panel')?.remove();
+    renderAdminPanel();
+  };
+
   window.mtToggleUser = async function(userId) {
     try {
       const r = await fetch(MT_API + `/admin/users/${userId}/toggle-active`, {
-        method: 'POST',
-        headers: getAuthHeaders()
+        method: 'POST', headers: getAuthHeaders()
       });
       if (r.ok) {
-        // Refresh panel
+        await loadAdminData();
         document.querySelector('.mt-admin-panel')?.remove();
-        fetchAdminUsers();
+        renderAdminPanel();
       } else {
         const d = await r.json();
         alert(d.detail || '操作失败');
       }
-    } catch(e) {
-      alert('网络错误');
-    }
+    } catch(e) { alert('网络错误'); }
+  };
+
+  window.mtSetRole = async function(userId, makeAdmin) {
+    if (!confirm(makeAdmin ? '确定将该用户设为管理员？' : '确定取消该用户的管理员权限？')) return;
+    try {
+      const r = await fetch(MT_API + `/admin/users/${userId}/role`, {
+        method: 'POST', headers: getAuthHeaders(),
+        body: JSON.stringify({ is_admin: makeAdmin })
+      });
+      if (r.ok) {
+        await loadAdminData();
+        document.querySelector('.mt-admin-panel')?.remove();
+        renderAdminPanel();
+      } else {
+        const d = await r.json();
+        alert(d.detail || '操作失败');
+      }
+    } catch(e) { alert('网络错误'); }
+  };
+
+  window.mtDeleteWf = async function(workflowId) {
+    if (!confirm('确定删除该工作流？')) return;
+    try {
+      const r = await fetch(MT_API + `/workflows/${workflowId}`, {
+        method: 'DELETE', headers: getAuthHeaders()
+      });
+      if (r.ok) {
+        await loadAdminData();
+        document.querySelector('.mt-admin-panel')?.remove();
+        renderAdminPanel();
+      } else {
+        const d = await r.json();
+        alert(d.detail || '删除失败');
+      }
+    } catch(e) { alert('网络错误'); }
+  };
+
+  window.mtUploadZa = function() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async () => {
+      const file = input.files[0];
+      if (!file) return;
+      try {
+        const data = JSON.parse(await file.text());
+        const name = file.name.replace(/\.json$/i, '');
+        const r = await fetch(MT_API + '/workflows', {
+          method: 'POST', headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, display_name: name, is_za: true, workflow_data: data })
+        });
+        if (r.ok) {
+          await loadAdminData();
+          document.querySelector('.mt-admin-panel')?.remove();
+          renderAdminPanel();
+        } else {
+          const d = await r.json();
+          alert(d.detail || '上传失败');
+        }
+      } catch(e) { alert('文件解析失败'); }
+    };
+    input.click();
   };
 
   // ── Workflow Type Badges ──

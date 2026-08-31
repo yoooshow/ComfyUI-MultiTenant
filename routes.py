@@ -351,6 +351,32 @@ def setup_api_routes(server):
         await update_user(user_id, is_active=new_status)
         return web.json_response({"status": "updated", "is_active": new_status})
 
+    @server.routes.post("/api/mt/admin/users/{user_id}/role")
+    async def admin_set_role(request):
+        """Set user role (admin or normal)."""
+        try:
+            await _require_admin(request)
+        except web.HTTPException as e:
+            return e
+
+        user_id = int(request.match_info["user_id"])
+        try:
+            data = await request.json()
+        except Exception:
+            return web.json_response({"detail": "Invalid JSON"}, status=400)
+
+        is_admin = bool(data.get("is_admin", False))
+
+        # Prevent demoting the primary admin (username 15096756699)
+        user = await get_user(id=user_id)
+        if not user:
+            return web.json_response({"detail": "用户不存在"}, status=404)
+        if user["username"] == "15096756699" and not is_admin:
+            return web.json_response({"detail": "不能取消主管理员的权限"}, status=400)
+
+        await update_user(user_id, is_admin=is_admin)
+        return web.json_response({"status": "updated", "is_admin": is_admin})
+
     @server.routes.get("/api/mt/admin/workflows")
     async def admin_list_workflows(request):
         try:
@@ -359,6 +385,11 @@ def setup_api_routes(server):
             return e
 
         workflows = await get_all_workflows()
+        # Resolve owner usernames
+        owner_names = {}
+        all_users = await get_all_users()
+        for u in all_users:
+            owner_names[u["id"]] = u["username"]
         return web.json_response({
             "items": [
                 {
@@ -368,6 +399,7 @@ def setup_api_routes(server):
                     "description": w["description"],
                     "is_za": bool(w["is_za_workflow"]),
                     "owner_id": w["owner_id"],
+                    "owner_username": owner_names.get(w["owner_id"], "—") if w["owner_id"] else None,
                     "created_at": w["created_at"],
                     "updated_at": w["updated_at"],
                 }

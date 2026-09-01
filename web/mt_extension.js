@@ -239,6 +239,15 @@
 
   window.mtLogout = function() {
     try {
+      // Save this account's workflow state (drafts + open tabs) to an
+      // account-scoped key BEFORE clearing, so switching back to this account
+      // later restores its own drafts/open workflows — instead of losing them.
+      try {
+        const uid = mtUser && mtUser.id;
+        if (uid) {
+          localStorage.setItem('mt_wf_state:' + uid, JSON.stringify(snapshotComfyWorkflowState()));
+        }
+      } catch(e) {}
       localStorage.removeItem('mt_token');
       localStorage.removeItem('mt_user');
       // Clear ComfyUI workflow/tab/draft state so the next login is clean.
@@ -248,6 +257,41 @@
     } catch(e) {}
     window.location.href = '/';
   };
+
+  // Capture all ComfyUI workflow pointers (drafts + open tabs + active tab)
+  // from localStorage/sessionStorage so they can be restored per-account.
+  function snapshotComfyWorkflowState() {
+    const P = 'Comfy.Workflow.';
+    const local = {};
+    const session = {};
+    function collect(store, target) {
+      if (!store) return;
+      try {
+        const keys = [];
+        for (let i = 0; i < store.length; i++) keys.push(store.key(i));
+        for (const k of keys) {
+          if (k && k.indexOf(P) === 0) target[k] = store.getItem(k);
+        }
+      } catch(e) {}
+    }
+    collect(window.localStorage, local);
+    collect(window.sessionStorage, session);
+    return { local: local, session: session };
+  }
+
+  // Restore a previously snapshotted workflow state into storage.
+  function restoreComfyWorkflowState(snap) {
+    if (!snap) return;
+    try { clearComfyWorkflowState(); } catch(e) {}
+    function write(store, obj) {
+      if (!store) return;
+      for (const k of Object.keys(obj || {})) {
+        try { store.setItem(k, obj[k]); } catch(e) {}
+      }
+    }
+    write(window.localStorage, snap.local);
+    write(window.sessionStorage, snap.session);
+  }
 
   // Remove ComfyUI's per-tab/cross-session workflow pointers (not scoped by
   // account) — prevents the previous user's open workflows from lingering.

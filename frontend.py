@@ -72,6 +72,12 @@ async function doLogin() {
       // new account's canvas. These keys (Comfy.Workflow.*) are NOT scoped
       // by account — they persist across login/logout in the same browser.
       clearWorkflowState();
+      // Restore THIS account's own workflow state (drafts + open tabs) that
+      // was snapshotted at logout, so each user keeps their own storage.
+      try {
+        const saved = localStorage.getItem('mt_wf_state:' + d.user.id);
+        if (saved) restoreWorkflowState(JSON.parse(saved));
+      } catch(e) {}
       localStorage.setItem('mt_token', d.access_token);
       localStorage.setItem('mt_user', JSON.stringify(d.user));
       window.location.href = '/';
@@ -106,6 +112,18 @@ function clearWorkflowState() {
   }
   sweep(window.localStorage);
   sweep(window.sessionStorage);
+}
+// Restore a per-account workflow-state snapshot into storage.
+function restoreWorkflowState(snap) {
+  if (!snap) return;
+  function write(store, obj) {
+    if (!store) return;
+    for (const k of Object.keys(obj || {})) {
+      try { store.setItem(k, obj[k]); } catch(e) {}
+    }
+  }
+  write(window.localStorage, snap.local);
+  write(window.sessionStorage, snap.session);
 }
 async function doRegister() {
   const u = document.getElementById('reg-u').value.trim();

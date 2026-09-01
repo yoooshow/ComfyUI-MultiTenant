@@ -12,7 +12,30 @@
   // Written synchronously as soon as this script runs, so we can always tell
   // whether the browser executed the CURRENT version of this file.
   try {
-    document.title = '[MT-LOADED v30]';
+    document.title = '[MT-LOADED v35]';
+  } catch(e) {}
+
+  // ── Sync bootstrap ──
+  // ComfyUI's Pinia store copies app.nodePreviewImages ONCE when the store
+  // initializes (after extension import). If we seed app.nodePreviewImages
+  // here — synchronously from the localStorage cache written by a previous
+  // restore — the store picks it up and PreviewImage nodes render restored
+  // previews right after refresh, before any async fetch completes.
+  try {
+    const cached = localStorage.getItem('mt_previews_cache');
+    if (cached) {
+      const c = JSON.parse(cached);
+      if (c && c.items && typeof window !== 'undefined' && window.app) {
+        const app = window.app;
+        if (!app.nodePreviewImages) app.nodePreviewImages = {};
+        let seeded = 0;
+        for (const [loc, url] of Object.entries(c.items)) {
+          app.nodePreviewImages[loc] = [url];
+          seeded++;
+        }
+        if (seeded) console.log('[MT] Seeded', seeded, 'previews from cache');
+      }
+    }
   } catch(e) {}
 
   const MT_API = '/api/mt';
@@ -32,6 +55,23 @@
         document.documentElement.appendChild(bootMarker);
       }
       bootMarker.textContent = text;
+    } catch(e) {}
+  }
+
+  // ── Diagnostics ──
+  // Write to both document.title AND the fixed boot marker element so we can
+  // always see the latest state even when ComfyUI overwrites the title.
+  function setDiag(text) {
+    try { document.title = '[MT] ' + text; } catch(e) {}
+    try {
+      let m = document.getElementById('mt-boot-marker');
+      if (!m) {
+        m = document.createElement('div');
+        m.id = 'mt-boot-marker';
+        m.style.cssText = 'position:fixed;top:0;left:0;z-index:99999;background:#4f6ef7;color:#fff;font-size:11px;padding:3px 8px;border-radius:0 0 4px 0;pointer-events:none;font-family:monospace;';
+        document.documentElement.appendChild(m);
+      }
+      m.textContent = '[MT] ' + text;
     } catch(e) {}
   }
 
@@ -501,19 +541,20 @@
   // Returns true when the graph had PreviewImage nodes to restore into.
   async function restorePreviewImages() {
     try {
-      if (!mtUser) { document.title = '[MT] restore: no user'; return false; }
+      if (!mtUser) { setDiag('restore: no user'); return false; }
       const app = window.app;
+      setDiag('restore: window.app=' + (app ? 'YES' : 'NO'));
       const graph = app?.graph || app?.rootGraph;
-      if (!graph) { document.title = '[MT] restore: no graph'; return false; }
+      if (!graph) { setDiag('restore: no graph (app=' + (app ? 'yes' : 'no') + ')'); return false; }
       const previewNodes = graph._nodes.filter(n => (n.type || '').includes('PreviewImage'));
-      document.title = '[MT] restore: nodes=' + previewNodes.length;
+      setDiag('restore: nodes=' + previewNodes.length);
       if (!previewNodes.length) return false;
 
       const r = await fetch(MT_API + '/previews/all', { headers: getAuthHeaders() });
-      if (!r.ok) { document.title = '[MT] restore: api ' + r.status; return false; }
+      if (!r.ok) { setDiag('restore: api ' + r.status); return false; }
       const data = await r.json();
       const previews = data.items || [];
-      if (!previews.length) { document.title = '[MT] restore: 0 previews'; return false; }
+      if (!previews.length) { setDiag('restore: 0 previews'); return false; }
 
       // Current workflow id
       let wfId = null;
@@ -532,27 +573,41 @@
         wfPreviews = previews.filter(p => nodeIds.has(String(p.node_id)));
       }
 
-      if (!app.nodeOutputs) app.nodeOutputs = {};
+      // The PreviewImage node component reads nodePreviewImages (a Pinia
+      // store ref initialized by copying app.nodePreviewImages). Writing
+      // nodeOutputs does NOT drive the preview renderer. So write
+      // app.nodePreviewImages[locatorId] = [url] — and ALSO persist to
+      // localStorage so the sync bootstrap in the IIFE can seed
+      // app.nodePreviewImages BEFORE the store initializes on next refresh.
+      if (!app.nodePreviewImages) app.nodePreviewImages = {};
       let injected = 0;
+      const cacheMap = {};
       previewNodes.forEach((node) => {
         const locatorId = String(node.id);
         const p = wfPreviews.find(x => String(x.node_id) === locatorId);
         if (!p) return; // no persisted preview for THIS node — leave empty
-        const sub = 'mt_previews/' + mtUser.id + '/' + p.workflow_id;
-        app.nodeOutputs[locatorId] = {
-          images: [{ filename: p.filename, subfolder: sub, type: 'output' }]
-        };
+        const url = '/view?filename=' + encodeURIComponent(p.filename) +
+                    '&subfolder=' + encodeURIComponent('mt_previews/' + mtUser.id + '/' + p.workflow_id) +
+                    '&type=output&rand=' + Math.random();
+        app.nodePreviewImages[locatorId] = [url];
+        cacheMap[locatorId] = url;
         injected++;
       });
       if (injected) {
-        try { app.nodeOutputs = { ...app.nodeOutputs }; } catch(e) {}
-        document.title = '[MT] restore: OK injected=' + injected;
+        try {
+          localStorage.setItem('mt_previews_cache', JSON.stringify({
+            user: mtUser.id,
+            ts: Date.now(),
+            items: cacheMap
+          }));
+        } catch(e) {}
+        setDiag('restore: OK injected=' + injected);
         console.log('[MT] Restored', injected, 'previews');
       }
       return injected > 0;
     } catch(e) {
       console.error('[MT] restorePreviewImages error:', e);
-      document.title = '[MT] restore: error';
+      setDiag('restore: error');
       return false;
     }
   }
@@ -573,30 +628,35 @@
   // ── Initialization ──
   async function init() {
     document.title = '[MT] init: start';
+    setDiag('init: start');
     // Skip if on login page
-    if (document.querySelector('.login-card')) { document.title = '[MT] init: login page'; return; }
+    if (document.querySelector('.login-card')) { setDiag('init: login page'); return; }
 
     // Fetch user
-    document.title = '[MT] init: fetching user...';
+    setDiag('init: fetching user...');
     await fetchUser();
-    document.title = mtUser ? ('[MT] init: user=' + mtUser.username) : '[MT] init: NO USER';
+    setDiag(mtUser ? ('init: user=' + mtUser.username) : 'init: NO USER');
     if (!mtUser) {
       // Not logged in — middleware serves login page; force reload if somehow here
       if (!document.querySelector('.login-card')) {
         addBootMarker('MT: no auth, reload');
-        document.title = '[MT] init: no auth, reload';
+        setDiag('init: no auth, reload');
         window.location.reload();
       }
       return;
     }
 
-    // Apply overrides
-    hideFeaturesForUser();
-    ensureUserMenuPresent();
-    setupWorkflowBadges();
-    setupPreviewPersistence();
-    // Restore persisted previews — poll until the graph is ready
-    startRestorePolling();
+    // Restore persisted previews FIRST — poll until the graph is ready.
+    // Do this before any other UI work so a failure elsewhere can't block it.
+    setDiag('init: starting restore...');
+    try { startRestorePolling(); setDiag('init: restore polling started'); }
+    catch(e) { setDiag('init: restore start ERR ' + (e && e.message || e)); }
+
+    // Apply overrides (each isolated so one failure can't stop the rest)
+    try { hideFeaturesForUser(); setDiag('init: hide ok'); } catch(e) { setDiag('init: hide ERR'); }
+    try { ensureUserMenuPresent(); } catch(e) {}
+    try { setupWorkflowBadges(); } catch(e) {}
+    try { setupPreviewPersistence(); } catch(e) {}
 
     // Re-restore previews whenever a workflow is loaded/switched —
     // ComfyUI calls app.loadGraphData(data, ...) on workflow load.

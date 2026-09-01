@@ -573,26 +573,46 @@
         wfPreviews = previews.filter(p => nodeIds.has(String(p.node_id)));
       }
 
-      // The PreviewImage node component reads nodePreviewImages (a Pinia
-      // store ref initialized by copying app.nodePreviewImages). Writing
-      // nodeOutputs does NOT drive the preview renderer. So write
-      // app.nodePreviewImages[locatorId] = [url] — and ALSO persist to
-      // localStorage so the sync bootstrap in the IIFE can seed
-      // app.nodePreviewImages BEFORE the store initializes on next refresh.
-      if (!app.nodePreviewImages) app.nodePreviewImages = {};
+      // The PreviewImage node component reads nodePreviewImages from the
+      // Pinia store (storeToRefs). Writing app.nodePreviewImages only seeds
+      // the store at init — later writes don't propagate. So we drive the
+      // store through ComfyUI's OWN event pipe: dispatch
+      // 'b_preview_with_metadata' with {blob, displayNodeId, jobId}, which
+      // app.ts handles by calling setNodePreviewsByExecutionId() -> store.
+      const api = window.app?.api;
       let injected = 0;
       const cacheMap = {};
-      previewNodes.forEach((node) => {
+      for (const node of previewNodes) {
         const locatorId = String(node.id);
         const p = wfPreviews.find(x => String(x.node_id) === locatorId);
-        if (!p) return; // no persisted preview for THIS node — leave empty
+        if (!p) continue; // no persisted preview for THIS node — leave empty
         const url = '/view?filename=' + encodeURIComponent(p.filename) +
                     '&subfolder=' + encodeURIComponent('mt_previews/' + mtUser.id + '/' + p.workflow_id) +
-                    '&type=output&rand=' + Math.random();
-        app.nodePreviewImages[locatorId] = [url];
-        cacheMap[locatorId] = url;
-        injected++;
-      });
+                    '&type=output';
+        // Fetch the persisted image as a Blob, then dispatch the native event
+        try {
+          const resp = await fetch(url, { credentials: 'same-origin' });
+          if (!resp.ok) { setDiag('restore: fetch ' + url + ' -> ' + resp.status); continue; }
+          const blob = await resp.blob();
+          if (api && typeof api.dispatchCustomEvent === 'function') {
+            api.dispatchCustomEvent('b_preview_with_metadata', {
+              blob: blob,
+              displayNodeId: locatorId,
+              jobId: 'mt-restore-' + locatorId + '-' + Date.now()
+            });
+            cacheMap[locatorId] = url;
+            injected++;
+          } else {
+            // Fallback: seed app.nodePreviewImages (helps next refresh init)
+            if (!app.nodePreviewImages) app.nodePreviewImages = {};
+            app.nodePreviewImages[locatorId] = [url];
+            cacheMap[locatorId] = url;
+            injected++;
+          }
+        } catch(e) {
+          console.error('[MT] restore fetch error', locatorId, e);
+        }
+      }
       if (injected) {
         try {
           localStorage.setItem('mt_previews_cache', JSON.stringify({
@@ -601,8 +621,8 @@
             items: cacheMap
           }));
         } catch(e) {}
-        setDiag('restore: OK injected=' + injected);
-        console.log('[MT] Restored', injected, 'previews');
+        setDiag('restore: OK injected=' + injected + ' (native event)');
+        console.log('[MT] Restored', injected, 'previews via native event');
       }
       return injected > 0;
     } catch(e) {

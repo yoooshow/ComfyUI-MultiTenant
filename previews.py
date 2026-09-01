@@ -221,8 +221,14 @@ def _persist_results(self, results, images, prompt, extra_pnginfo) -> dict:
         except Exception as e:
             logger.error(f"[ComfyUI-MT] Preview persist single failed: {e}")
 
-    if persisted:
-        results["ui"]["images"] = persisted
+    # NOTE: do NOT overwrite results["ui"]["images"]. The original images
+    # reference the temp-dir files with subfolder="" and type="temp", which
+    # the frontend's executed-event handler uses to render the LIVE preview
+    # (buildImageUrls -> /view?type=temp). Replacing them with our persisted
+    # entries (subfolder=<workflow_id>) broke live preview: the /view request
+    # 404'd, so previews only appeared after F5 (when restore re-points to
+    # output/mt_previews). Persistence is a side effect only — keep the
+    # native results intact.
 
     return results
 

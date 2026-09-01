@@ -585,13 +585,6 @@
 
       let injected = 0;
       const cacheMap = {};
-      // Build the full nodeOutputs object to assign via the setter.
-      // app.nodeOutputs has a setter that (when vueAppReady) calls
-      // replaceOutputsFromLegacy -> writes the Pinia store ref that
-      // LGraphNode.vue's `nodeMedia` actually reads. Assigning the WHOLE
-      // object (not mutating in place) is what triggers the setter.
-      let newOutputs = {};
-      try { newOutputs = { ...(app.nodeOutputs || {}) }; } catch(e) {}
       for (const node of previewNodes) {
         const locatorId = String(node.id);
         const p = wfPreviews.find(x => String(x.node_id) === locatorId);
@@ -599,19 +592,26 @@
         const url = '/view?filename=' + encodeURIComponent(p.filename) +
                     '&subfolder=' + encodeURIComponent('mt_previews/' + mtUser.id + '/' + p.workflow_id) +
                     '&type=output';
-        newOutputs[locatorId] = {
-          images: [{ filename: p.filename, subfolder: 'mt_previews/' + mtUser.id + '/' + p.workflow_id, type: 'output' }]
-        };
-        cacheMap[locatorId] = url;
-        injected++;
-      }
-      if (injected) {
+        // DIRECTLY set the LiteGraph node image. This is the lowest-level,
+        // store-independent mechanism: LiteGraph draws node.imgs[] on the
+        // canvas. Bypasses Pinia store / Vue / event-pipe entirely — the
+        // same fields useNodeImage().showPreview() ultimately sets.
         try {
-          app.nodeOutputs = newOutputs;  // triggers setter -> syncs Pinia store
+          const img = new Image();
+          img.onload = function() {
+            try {
+              node.previewMediaType = 'image';
+              node.imageIndex = null;
+              node.imgs = [img];
+              if (node.graph && node.graph.setDirtyCanvas) node.graph.setDirtyCanvas(true, true);
+            } catch(e) {}
+          };
+          img.src = url;
+          cacheMap[locatorId] = url;
+          injected++;
         } catch(e) {
-          console.error('[MT] set nodeOutputs failed', e);
+          console.error('[MT] set node.imgs failed', locatorId, e);
         }
-        setDiag('restore: OK injected=' + injected + ' (via nodeOutputs setter)');
       }
       if (injected) {
         try {
@@ -621,8 +621,7 @@
             items: cacheMap
           }));
         } catch(e) {}
-        setDiag('restore: OK injected=' + injected + ' (native event)');
-        console.log('[MT] Restored', injected, 'previews via native event');
+        setDiag('restore: OK injected=' + injected + ' (node.imgs)');
       }
       return injected > 0;
     } catch(e) {

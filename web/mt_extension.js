@@ -589,13 +589,27 @@
         const locatorId = String(node.id);
         const p = wfPreviews.find(x => String(x.node_id) === locatorId);
         if (!p) continue; // no persisted preview for THIS node — leave empty
+        const sub = 'mt_previews/' + mtUser.id + '/' + p.workflow_id;
         const url = '/view?filename=' + encodeURIComponent(p.filename) +
-                    '&subfolder=' + encodeURIComponent('mt_previews/' + mtUser.id + '/' + p.workflow_id) +
+                    '&subfolder=' + encodeURIComponent(sub) +
                     '&type=output';
-        // DIRECTLY set the LiteGraph node image. This is the lowest-level,
-        // store-independent mechanism: LiteGraph draws node.imgs[] on the
-        // canvas. Bypasses Pinia store / Vue / event-pipe entirely — the
-        // same fields useNodeImage().showPreview() ultimately sets.
+
+        // (1) Dispatch the native 'executed' event so the Pinia store
+        // nodeOutputs ref is populated — this is the same path live preview
+        // uses (app.ts -> setNodeOutputsByExecutionId -> store), and it's
+        // what updatePreviews reads to re-render the node on next redraw.
+        try {
+          api.dispatchCustomEvent('executed', {
+            node: locatorId,
+            display_node: locatorId,
+            output: { images: [{ filename: p.filename, subfolder: sub, type: 'output' }] },
+            prompt_id: 'mt-restore-' + Date.now(),
+            merge: false
+          });
+        } catch(e) {}
+
+        // (2) Directly set node.imgs as a belt-and-suspenders fallback, so
+        // even if the store->render path is delayed, the canvas shows it.
         try {
           const img = new Image();
           img.onload = function() {
@@ -604,14 +618,16 @@
               node.imageIndex = null;
               node.imgs = [img];
               if (node.graph && node.graph.setDirtyCanvas) node.graph.setDirtyCanvas(true, true);
+              if (graph && graph.setDirtyCanvas) graph.setDirtyCanvas(true, true);
             } catch(e) {}
           };
           img.src = url;
-          cacheMap[locatorId] = url;
-          injected++;
         } catch(e) {
           console.error('[MT] set node.imgs failed', locatorId, e);
         }
+
+        cacheMap[locatorId] = url;
+        injected++;
       }
       if (injected) {
         try {
@@ -621,7 +637,11 @@
             items: cacheMap
           }));
         } catch(e) {}
-        setDiag('restore: OK injected=' + injected + ' (node.imgs)');
+        // Force a canvas redraw so updatePreviews picks up the store data.
+        try {
+          if (graph && graph.setDirtyCanvas) graph.setDirtyCanvas(true, true);
+        } catch(e) {}
+        setDiag('restore: OK injected=' + injected + ' (executed+imgs)');
       }
       return injected > 0;
     } catch(e) {
@@ -677,20 +697,28 @@
     try { setupWorkflowBadges(); } catch(e) {}
     try { setupPreviewPersistence(); } catch(e) {}
 
-    // Re-restore previews whenever a workflow is loaded/switched —
-    // ComfyUI calls app.loadGraphData(data, ...) on workflow load.
+    // Re-restore previews whenever a workflow is loaded/switched.
+    // ComfyUI's loadGraphData lives on window.comfyAPI.app.app (the real
+    // ComfyApp instance), NOT on window.app. Hook BOTH to be safe, and
+    // restore with a longer delay since the graph is rebuilt async.
     try {
-      const app = window.app;
-      if (app && typeof app.loadGraphData === 'function') {
-        const origLoad = app.loadGraphData.bind(app);
-        app.loadGraphData = function(...args) {
-          const ret = origLoad(...args);
-          // Wait for graph configure to settle, then restore previews
-          setTimeout(restorePreviewImages, 800);
-          return ret;
-        };
-        console.log('[MT] loadGraphData hooked (preview restore on workflow switch)');
+      const candidates = [];
+      if (window.comfyAPI && window.comfyAPI.app && window.comfyAPI.app.app) candidates.push(window.comfyAPI.app.app);
+      if (window.app && window.app !== window.comfyAPI?.app?.app) candidates.push(window.app);
+      let hooked = false;
+      for (const app of candidates) {
+        if (app && typeof app.loadGraphData === 'function') {
+          const origLoad = app.loadGraphData.bind(app);
+          app.loadGraphData = function(...args) {
+            const ret = origLoad(...args);
+            setTimeout(restorePreviewImages, 1200);
+            setTimeout(restorePreviewImages, 3000);
+            return ret;
+          };
+          hooked = true;
+        }
       }
+      console.log('[MT] loadGraphData hook ' + (hooked ? 'OK' : 'FAILED — no loadGraphData found'));
     } catch(e) {
       console.error('[MT] loadGraphData hook error:', e);
     }

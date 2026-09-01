@@ -573,15 +573,25 @@
         wfPreviews = previews.filter(p => nodeIds.has(String(p.node_id)));
       }
 
-      // The PreviewImage node component reads nodePreviewImages from the
-      // Pinia store (storeToRefs). Writing app.nodePreviewImages only seeds
-      // the store at init — later writes don't propagate. So we drive the
-      // store through ComfyUI's OWN event pipe: dispatch
-      // 'b_preview_with_metadata' with {blob, displayNodeId, jobId}, which
-      // app.ts handles by calling setNodePreviewsByExecutionId() -> store.
-      const api = window.app?.api;
+      // The PreviewImage node renders via LGraphNode.vue's `nodeMedia`
+      // computed, which reads `nodeOutputs.nodeOutputs[locatorId]` (the
+      // nodeOutputs store ref) and requires output.images to be non-empty.
+      // The correct way to populate that store ref from an extension is to
+      // dispatch the native `executed` event — app.ts listens and calls
+      // setNodeOutputsByExecutionId() which writes the nodeOutputs store ref.
+      const api = (typeof window !== 'undefined' && window.comfyAPI && window.comfyAPI.api && window.comfyAPI.api.api)
+                  || window.app?.api;
+      setDiag('restore: api=' + (window.comfyAPI && window.comfyAPI.api && window.comfyAPI.api.api ? 'comfyAPI' : (window.app?.api ? 'app.api' : 'NONE')));
+
       let injected = 0;
       const cacheMap = {};
+      // Build the full nodeOutputs object to assign via the setter.
+      // app.nodeOutputs has a setter that (when vueAppReady) calls
+      // replaceOutputsFromLegacy -> writes the Pinia store ref that
+      // LGraphNode.vue's `nodeMedia` actually reads. Assigning the WHOLE
+      // object (not mutating in place) is what triggers the setter.
+      let newOutputs = {};
+      try { newOutputs = { ...(app.nodeOutputs || {}) }; } catch(e) {}
       for (const node of previewNodes) {
         const locatorId = String(node.id);
         const p = wfPreviews.find(x => String(x.node_id) === locatorId);
@@ -589,29 +599,19 @@
         const url = '/view?filename=' + encodeURIComponent(p.filename) +
                     '&subfolder=' + encodeURIComponent('mt_previews/' + mtUser.id + '/' + p.workflow_id) +
                     '&type=output';
-        // Fetch the persisted image as a Blob, then dispatch the native event
+        newOutputs[locatorId] = {
+          images: [{ filename: p.filename, subfolder: 'mt_previews/' + mtUser.id + '/' + p.workflow_id, type: 'output' }]
+        };
+        cacheMap[locatorId] = url;
+        injected++;
+      }
+      if (injected) {
         try {
-          const resp = await fetch(url, { credentials: 'same-origin' });
-          if (!resp.ok) { setDiag('restore: fetch ' + url + ' -> ' + resp.status); continue; }
-          const blob = await resp.blob();
-          if (api && typeof api.dispatchCustomEvent === 'function') {
-            api.dispatchCustomEvent('b_preview_with_metadata', {
-              blob: blob,
-              displayNodeId: locatorId,
-              jobId: 'mt-restore-' + locatorId + '-' + Date.now()
-            });
-            cacheMap[locatorId] = url;
-            injected++;
-          } else {
-            // Fallback: seed app.nodePreviewImages (helps next refresh init)
-            if (!app.nodePreviewImages) app.nodePreviewImages = {};
-            app.nodePreviewImages[locatorId] = [url];
-            cacheMap[locatorId] = url;
-            injected++;
-          }
+          app.nodeOutputs = newOutputs;  // triggers setter -> syncs Pinia store
         } catch(e) {
-          console.error('[MT] restore fetch error', locatorId, e);
+          console.error('[MT] set nodeOutputs failed', e);
         }
+        setDiag('restore: OK injected=' + injected + ' (via nodeOutputs setter)');
       }
       if (injected) {
         try {

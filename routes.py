@@ -20,6 +20,27 @@ logger = logging.getLogger(__name__)
 def setup_api_routes(server):
     """Register all multi-tenant API routes."""
 
+    # ── Diagnostic endpoint ──
+    # Frontend posts runtime state here so we can see browser-side facts
+    # (window.comfyAPI presence, api singleton, store state) in server logs.
+    @server.routes.post("/api/mt/diag")
+    async def diag(request):
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        try:
+            from .config import get_db_path
+            diag_log = os.path.join(os.path.dirname(get_db_path()), "mt_diag.log")
+        except Exception:
+            diag_log = "/tmp/mt_diag.log"
+        try:
+            with open(diag_log, "a") as f:
+                f.write(json.dumps(body, ensure_ascii=False) + "\n")
+        except Exception:
+            pass
+        return web.json_response({"status": "ok"})
+
     # ── Auth Routes ──
 
     @server.routes.post("/api/mt/auth/login")

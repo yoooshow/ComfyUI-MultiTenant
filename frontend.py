@@ -67,12 +67,45 @@ async function doLogin() {
     const r = await fetch(API + '/auth/login', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({username: u, password: p}) });
     const d = await r.json();
     if (r.ok) {
+      // Clear ComfyUI's per-user workflow/tab/draft state BEFORE switching
+      // user, so the previous account's open workflows don't leak into the
+      // new account's canvas. These keys (Comfy.Workflow.*) are NOT scoped
+      // by account — they persist across login/logout in the same browser.
+      clearWorkflowState();
       localStorage.setItem('mt_token', d.access_token);
       localStorage.setItem('mt_user', JSON.stringify(d.user));
       window.location.href = '/';
     } else { err.textContent = d.detail || '登录失败'; err.style.display = 'block'; }
   } catch(e) { err.textContent = '网络错误'; err.style.display = 'block'; }
   btn.disabled = false; btn.textContent = '登录';
+}
+// Remove ComfyUI workflow/tab/draft pointers so a fresh login starts clean.
+// Keys: Comfy.Workflow.{OpenPaths,ActivePath,LastOpenPaths,LastActivePath,
+//        DraftIndex.v2,Draft.v2} (scoped by clientId/workspace, NOT by user).
+function clearWorkflowState() {
+  const prefixes = [
+    'Comfy.Workflow.OpenPaths:',
+    'Comfy.Workflow.ActivePath:',
+    'Comfy.Workflow.LastOpenPaths:',
+    'Comfy.Workflow.LastActivePath:',
+    'Comfy.Workflow.DraftIndex.v2:',
+    'Comfy.Workflow.Draft.v2:'
+  ];
+  function sweep(store) {
+    if (!store) return;
+    try {
+      const keys = [];
+      for (let i = 0; i < store.length; i++) keys.push(store.key(i));
+      for (const k of keys) {
+        if (!k) continue;
+        for (const p of prefixes) {
+          if (k.indexOf(p) === 0) { store.removeItem(k); break; }
+        }
+      }
+    } catch(e) {}
+  }
+  sweep(window.localStorage);
+  sweep(window.sessionStorage);
 }
 async function doRegister() {
   const u = document.getElementById('reg-u').value.trim();

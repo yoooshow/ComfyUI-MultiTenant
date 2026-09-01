@@ -9,34 +9,16 @@
   'use strict';
 
   // ── Loaded marker ──
-  // Written synchronously as soon as this script runs, so we can always tell
-  // whether the browser executed the CURRENT version of this file.
   try {
-    document.title = '[MT-LOADED v35]';
+    document.title = '[MT-LOADED v47]';
   } catch(e) {}
 
-  // ── Sync bootstrap ──
-  // ComfyUI's Pinia store copies app.nodePreviewImages ONCE when the store
-  // initializes (after extension import). If we seed app.nodePreviewImages
-  // here — synchronously from the localStorage cache written by a previous
-  // restore — the store picks it up and PreviewImage nodes render restored
-  // previews right after refresh, before any async fetch completes.
-  try {
-    const cached = localStorage.getItem('mt_previews_cache');
-    if (cached) {
-      const c = JSON.parse(cached);
-      if (c && c.items && typeof window !== 'undefined' && window.app) {
-        const app = window.app;
-        if (!app.nodePreviewImages) app.nodePreviewImages = {};
-        let seeded = 0;
-        for (const [loc, url] of Object.entries(c.items)) {
-          app.nodePreviewImages[loc] = [url];
-          seeded++;
-        }
-        if (seeded) console.log('[MT] Seeded', seeded, 'previews from cache');
-      }
-    }
-  } catch(e) {}
+  // NOTE: do NOT bootstrap previews from localStorage here. The previous
+  // mt_previews_cache was a SINGLE global key shared across ALL accounts —
+  // switching user leaked the previous account's previews into the new
+  // account's canvas (user: "换账号后预览图还在"). Per-user restore is done
+  // exclusively through the authenticated /previews/all API (server filters
+  // by user_id), so drop the local cache entirely.
 
   const MT_API = '/api/mt';
   let mtUser = null;
@@ -259,11 +241,41 @@
     try {
       localStorage.removeItem('mt_token');
       localStorage.removeItem('mt_user');
+      // Clear ComfyUI workflow/tab/draft state so the next login is clean.
+      try { clearComfyWorkflowState(); } catch(e) {}
       // Clear auth cookie
       document.cookie = 'mt_token=; Path=/; Max-Age=0';
     } catch(e) {}
     window.location.href = '/';
   };
+
+  // Remove ComfyUI's per-tab/cross-session workflow pointers (not scoped by
+  // account) — prevents the previous user's open workflows from lingering.
+  function clearComfyWorkflowState() {
+    const prefixes = [
+      'Comfy.Workflow.OpenPaths:',
+      'Comfy.Workflow.ActivePath:',
+      'Comfy.Workflow.LastOpenPaths:',
+      'Comfy.Workflow.LastActivePath:',
+      'Comfy.Workflow.DraftIndex.v2:',
+      'Comfy.Workflow.Draft.v2:'
+    ];
+    function sweep(store) {
+      if (!store) return;
+      try {
+        const keys = [];
+        for (let i = 0; i < store.length; i++) keys.push(store.key(i));
+        for (const k of keys) {
+          if (!k) continue;
+          for (const p of prefixes) {
+            if (k.indexOf(p) === 0) { store.removeItem(k); break; }
+          }
+        }
+      } catch(e) {}
+    }
+    sweep(window.localStorage);
+    sweep(window.sessionStorage);
+  }
 
   window.mtOpenAdmin = function() {
     openAdminPanel();
@@ -630,13 +642,6 @@
         injected++;
       }
       if (injected) {
-        try {
-          localStorage.setItem('mt_previews_cache', JSON.stringify({
-            user: mtUser.id,
-            ts: Date.now(),
-            items: cacheMap
-          }));
-        } catch(e) {}
         // Force a canvas redraw so updatePreviews picks up the store data.
         try {
           if (graph && graph.setDirtyCanvas) graph.setDirtyCanvas(true, true);

@@ -10,7 +10,7 @@
 
   // ── Loaded marker ──
   try {
-    document.title = '[MT-LOADED v62]';
+    document.title = '[MT-LOADED v63]';
   } catch(e) {}
 
   // NOTE: do NOT bootstrap previews from localStorage here. The previous
@@ -841,9 +841,13 @@
             let file;
             try { file = decodeURIComponent(encodedFile); } catch(e) { file = encodedFile; }
             let newFile = null;
-            // 情况 1：保存 Z&A → 去 Z&A 段，进「个人」，文件名加时间戳避免覆盖
+            // 情况 1：保存 Z&A
             if (file.indexOf('Z&A/') >= 0) {
-              newFile = addTimestampToFilename(file.replace('Z&A/', '个人/'));
+              // 管理员：正常保存到 Z&A（覆盖更新公用工作流，方便随时更新）
+              // 非管理员：去 Z&A 段，进「个人」，文件名加时间戳避免覆盖
+              if (!mtUser.is_admin) {
+                newFile = addTimestampToFilename(file.replace('Z&A/', '个人/'));
+              }
             }
             // 情况 2：保存根目录的工作流 .json（非 Z&A、非「个人」）→ 放进「个人」文件夹
             else if (/^workflows\/[^/]+\.json$/.test(file) && file.indexOf('个人/') < 0) {

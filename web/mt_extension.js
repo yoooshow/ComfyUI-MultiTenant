@@ -10,7 +10,7 @@
 
   // ── Loaded marker ──
   try {
-    document.title = '[MT-LOADED v55]';
+    document.title = '[MT-LOADED v56]';
   } catch(e) {}
 
   // NOTE: do NOT bootstrap previews from localStorage here. The previous
@@ -245,6 +245,7 @@
         <div style="font-size:11px;color:var(--descrip-text,#888);margin-top:2px;">${roleText} · ${mtUser?.username || ''}</div>
       </div>
       ${mtUser?.is_admin ? '<button onclick="mtOpenAdmin()" class="mt-menu-item">⚙ 管理控制台</button>' : ''}
+      <button onclick="mtToggleTheme()" class="mt-menu-item">🌓 切换浅色 / 深色</button>
       <button onclick="mtLogout()" class="mt-menu-item" style="color:#ef4444;">退出登录</button>
     `;
 
@@ -273,6 +274,47 @@
       });
     }, 0);
   }
+
+  // ── 主题（浅色/深色）切换 ──
+  // 设置按钮对非管理员隐藏了，这里给一个深浅色切换入口。
+  // ComfyUI 主题设置 key = Comfy.ColorPalette，值 'light'/'dark'。
+  const MT_THEME_KEY = 'mt_theme';
+
+  function getApi() {
+    try {
+      return (window.comfyAPI && window.comfyAPI.api && window.comfyAPI.api.api) || null;
+    } catch(e) { return null; }
+  }
+
+  // 默认浅色：首次（localStorage 无 mt_theme 标记）强制设为 light
+  async function applyDefaultTheme() {
+    try {
+      const saved = localStorage.getItem(MT_THEME_KEY);
+      if (saved) return; // 用户已选过，尊重其选择
+      const api = getApi();
+      if (!api) return;
+      const cur = await api.getSetting('Comfy.ColorPalette');
+      if (cur && cur !== 'light') {
+        await api.storeSettings({ 'Comfy.ColorPalette': 'light' });
+      }
+      localStorage.setItem(MT_THEME_KEY, 'light');
+    } catch(e) {}
+  }
+
+  window.mtToggleTheme = async function() {
+    try {
+      const api = getApi();
+      if (!api) { showZaToast('主题切换不可用'); return; }
+      const current = localStorage.getItem(MT_THEME_KEY) || 'light';
+      const next = (current === 'light') ? 'dark' : 'light';
+      await api.storeSettings({ 'Comfy.ColorPalette': next });
+      localStorage.setItem(MT_THEME_KEY, next);
+      showZaToast('已切换为' + (next === 'light' ? '浅色' : '深色') + '主题，正在刷新…');
+      setTimeout(() => location.reload(), 600);
+    } catch(e) {
+      showZaToast('主题切换失败');
+    }
+  };
 
   window.mtLogout = function() {
     try {
@@ -851,6 +893,7 @@
 
     // Apply overrides (each isolated so one failure can't stop the rest)
     try { hideFeaturesForUser(); setDiag('init: hide ok'); } catch(e) { setDiag('init: hide ERR'); }
+    try { applyDefaultTheme(); } catch(e) {}
     try { ensureUserMenuPresent(); } catch(e) {}
     try { setupWorkflowBadges(); } catch(e) {}
     try { setupPreviewPersistence(); } catch(e) {}

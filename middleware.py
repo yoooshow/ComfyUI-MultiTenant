@@ -132,9 +132,12 @@ def setup_middleware(server):
             if user is None:
                 return web.json_response({"detail": "未登录"}, status=401)
             if not user.get("is_admin", False):
-                # Settings GET stays readable so the frontend can render;
-                # block only settings writes (PUT/POST).
-                if path.startswith("/api/settings") and request.method == "GET":
+                # Settings GET+POST stay available for non-admin: UI preferences
+                # (theme color etc.) must be adjustable even though the settings
+                # dialog is hidden from non-admin users. Settings are per-user UI
+                # preferences only — no system-level impact (models/templates/
+                # manager are the sensitive ones, still blocked above).
+                if path.startswith("/api/settings"):
                     pass
                 else:
                     return web.json_response({"detail": "需要管理员权限"}, status=403)

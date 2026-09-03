@@ -10,7 +10,7 @@
 
   // ── Loaded marker ──
   try {
-    document.title = '[MT-LOADED v48]';
+    document.title = '[MT-LOADED v49]';
   } catch(e) {}
 
   // NOTE: do NOT bootstrap previews from localStorage here. The previous
@@ -618,13 +618,16 @@
     } catch(e) {}
   }
 
-  // 各种 URL 编码形式下的 workflows/Z&A/ 段 → 重写为 workflows/
-  const ZA_PATH_PATTERNS = [
-    'workflows/Z&A/',
-    'workflows%2FZ%26A%2F',
-    'workflows%2FZ&A%2F',
-    'workflows/Z%26A/'
-  ];
+  // 在 .json 扩展名前插入时间戳（YYYYMMDD_HHMMSS），避免覆盖同名私有副本
+  function addTimestampToFilename(path) {
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, '0');
+    const ts = '' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '_' +
+               p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+    const i = path.lastIndexOf('.json');
+    if (i >= 0) return path.slice(0, i) + '_' + ts + '.json';
+    return path + '_' + ts;
+  }
 
   function setupZaSaveRedirect() {
     const originalFetch = window.fetch;
@@ -633,13 +636,22 @@
         let url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
         const opts = args[1] || {};
         const method = (opts.method || 'GET').toUpperCase();
-        // 非管理员 + POST userdata + 目标含 Z&A → 重写为私有目录
-        if (mtUser && !mtUser.is_admin && method === 'POST' && url.includes('/userdata/')) {
-          for (const p of ZA_PATH_PATTERNS) {
-            if (url.includes(p)) {
-              const newUrl = url.replace(p, 'workflows/');
+        // 非管理员 + POST userdata → 检查是否保存到 Z&A 目录
+        if (mtUser && !mtUser.is_admin && method === 'POST') {
+          // 提取 file 段（/api/userdata/ 或 /userdata/ 之后，到 ?/#/结尾）
+          const m = url.match(/\/userdata\/(.+?)([?#].*)?$/);
+          if (m) {
+            const encodedFile = m[1];
+            let file;
+            try { file = decodeURIComponent(encodedFile); } catch(e) { file = encodedFile; }
+            if (file.indexOf('Z&A/') >= 0) {
+              // 去 Z&A 段 → 私有目录，文件名加时间戳避免覆盖
+              let newFile = file.replace('Z&A/', '');
+              newFile = addTimestampToFilename(newFile);
+              const newEncoded = encodeURIComponent(newFile);
+              const newUrl = url.replace(encodedFile, newEncoded);
               console.log('[MT] Z&A save → private copy:', url, '=>', newUrl);
-              showZaToast('🔒 公用工作流为只读，已另存为你的私有副本');
+              showZaToast('🔒 公用工作流为只读，已另存为私有副本（' + newFile.split('/').pop() + '）');
               const newArgs = [newUrl].concat(Array.prototype.slice.call(args, 1));
               return originalFetch.apply(this, newArgs);
             }

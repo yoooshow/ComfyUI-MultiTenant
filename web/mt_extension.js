@@ -10,7 +10,7 @@
 
   // ── Loaded marker ──
   try {
-    document.title = '[MT-LOADED v51]';
+    document.title = '[MT-LOADED v52]';
   } catch(e) {}
 
   // NOTE: do NOT bootstrap previews from localStorage here. The previous
@@ -123,6 +123,11 @@
     '#comfyui-manager-button',
   ];
 
+  // ComfyUI Manager 的命令菜单项（ComfyMenuButton 下拉里的 icon class）
+  // Manager 通过 app.registerExtension({commands:[...]}) 注册，
+  // icon = "mdi mdi-puzzle"（主菜单）/ "pi pi-server"（CustomNodes Manager）
+  const MANAGER_MENU_ICONS = ['mdi-puzzle', 'pi-server'];
+
   function applyHidden() {
     // 1. 隐藏整个侧边栏按钮：icon class 定位到 <i>，再向上找 .side-bar-button
     HIDDEN_ICON_PATTERNS.forEach(pat => {
@@ -137,6 +142,15 @@
     HIDDEN_SELECTORS.forEach(sel => {
       try {
         document.querySelectorAll(sel).forEach(el => { el.style.display = 'none'; });
+      } catch(e) {}
+    });
+    // 3. 隐藏 ComfyUI Manager 菜单项（ComfyMenuButton 下拉菜单里的命令）
+    MANAGER_MENU_ICONS.forEach(icon => {
+      try {
+        document.querySelectorAll('.p-menubar-item-icon.' + icon).forEach(el => {
+          const item = el.closest('.p-menubar-item-link') || el.closest('li') || el;
+          item.style.display = 'none';
+        });
       } catch(e) {}
     });
   }

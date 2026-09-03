@@ -10,7 +10,7 @@
 
   // ── Loaded marker ──
   try {
-    document.title = '[MT-LOADED v57]';
+    document.title = '[MT-LOADED v58]';
   } catch(e) {}
 
   // NOTE: do NOT bootstrap previews from localStorage here. The previous
@@ -710,8 +710,10 @@
         let url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
         const opts = args[1] || {};
         const method = (opts.method || 'GET').toUpperCase();
-        // 非管理员 + POST userdata → 检查是否保存到 Z&A 目录
-        if (mtUser && !mtUser.is_admin && method === 'POST') {
+        // 所有用户（含管理员）+ POST userdata → 保存 Z&A 目录时重定向到「个人」。
+        // 管理员也和其他用户一样：保存共享工作流 = 另存为个人副本；修改共享
+        // 工作流走「Z&A 共享」管理面板上传。
+        if (mtUser && method === 'POST') {
           // 提取 file 段（/api/userdata/ 或 /userdata/ 之后，到 ?/#/结尾）
           const m = url.match(/\/userdata\/(.+?)([?#].*)?$/);
           if (m) {

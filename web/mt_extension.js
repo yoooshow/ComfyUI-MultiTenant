@@ -10,7 +10,7 @@
 
   // ── Loaded marker ──
   try {
-    document.title = '[MT-LOADED v52]';
+    document.title = '[MT-LOADED v53]';
   } catch(e) {}
 
   // NOTE: do NOT bootstrap previews from localStorage here. The previous
@@ -123,10 +123,25 @@
     '#comfyui-manager-button',
   ];
 
-  // ComfyUI Manager 的命令菜单项（ComfyMenuButton 下拉里的 icon class）
-  // Manager 通过 app.registerExtension({commands:[...]}) 注册，
-  // icon = "mdi mdi-puzzle"（主菜单）/ "pi pi-server"（CustomNodes Manager）
-  const MANAGER_MENU_ICONS = ['mdi-puzzle', 'pi-server'];
+  // ComfyUI Manager 按钮组（右上角 action bar，和运行按钮同区）
+  // Manager 往 .comfy-menu 追加按钮组：新式 ComfyButtonGroup（container =
+  // .comfyui-button-group，主按钮 icon "mdi mdi-puzzle"，tooltip "ComfyUI Manager"）
+  // + 旧式 fallback 裸 button（textContent="Manager"）+ #shareButton。
+  function hideManagerButtons() {
+    try {
+      // 新式：主按钮 icon mdi-puzzle → 向上找 .comfyui-button-group 隐藏整组
+      document.querySelectorAll('.mdi-puzzle').forEach(icon => {
+        const group = icon.closest('.comfyui-button-group') || icon.closest('button') || icon;
+        group.style.display = 'none';
+      });
+      // 旧式 fallback：textContent="Manager" 的裸 button + #shareButton
+      document.querySelectorAll('.comfy-menu button').forEach(btn => {
+        if (btn.id === 'shareButton' || btn.textContent.trim() === 'Manager') {
+          btn.style.display = 'none';
+        }
+      });
+    } catch(e) {}
+  }
 
   function applyHidden() {
     // 1. 隐藏整个侧边栏按钮：icon class 定位到 <i>，再向上找 .side-bar-button
@@ -144,15 +159,8 @@
         document.querySelectorAll(sel).forEach(el => { el.style.display = 'none'; });
       } catch(e) {}
     });
-    // 3. 隐藏 ComfyUI Manager 菜单项（ComfyMenuButton 下拉菜单里的命令）
-    MANAGER_MENU_ICONS.forEach(icon => {
-      try {
-        document.querySelectorAll('.p-menubar-item-icon.' + icon).forEach(el => {
-          const item = el.closest('.p-menubar-item-link') || el.closest('li') || el;
-          item.style.display = 'none';
-        });
-      } catch(e) {}
-    });
+    // 3. 隐藏 ComfyUI Manager 按钮组（右上角 action bar）
+    hideManagerButtons();
   }
 
   function hideFeaturesForUser() {

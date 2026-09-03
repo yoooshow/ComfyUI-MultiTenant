@@ -10,7 +10,7 @@
 
   // ── Loaded marker ──
   try {
-    document.title = '[MT-LOADED v65]';
+    document.title = '[MT-LOADED v66]';
   } catch(e) {}
 
   // NOTE: do NOT bootstrap previews from localStorage here. The previous
@@ -930,6 +930,19 @@
       }
       return originalFetch.apply(this, args);
     };
+    // 自动跳过 ComfyUI 原生「文件名」输入框（保存/另存为时弹的），改由我们的选单接管。
+    // 文件名框 message = "输入文件名"/"Enter filename"，确认按钮直接 click 掉。
+    const saveNameObserver = new MutationObserver(() => {
+      try {
+        const box = document.querySelector('.prompt-dialog-content');
+        if (!box) return;
+        const labelText = box.querySelector('label')?.textContent || '';
+        if (!/文件名|filename/i.test(labelText)) return;
+        const btn = box.querySelector('button');
+        if (btn) btn.click();
+      } catch(e) {}
+    });
+    saveNameObserver.observe(document.body, { childList: true, subtree: true });
     console.log('[MT] Z&A save redirect ready');
   }
 

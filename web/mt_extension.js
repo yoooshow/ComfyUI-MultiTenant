@@ -10,7 +10,7 @@
 
   // ── Loaded marker ──
   try {
-    document.title = '[MT-LOADED v56]';
+    document.title = '[MT-LOADED v57]';
   } catch(e) {}
 
   // NOTE: do NOT bootstrap previews from localStorage here. The previous
@@ -417,18 +417,20 @@
 
   async function loadAdminData() {
     try {
-      const [usersR, wfR] = await Promise.all([
+      const [usersR, wfR, uwfR] = await Promise.all([
         fetch(MT_API + '/admin/users', { headers: getAuthHeaders() }),
-        fetch(MT_API + '/admin/workflows', { headers: getAuthHeaders() })
+        fetch(MT_API + '/admin/workflows', { headers: getAuthHeaders() }),
+        fetch(MT_API + '/admin/user-workflows', { headers: getAuthHeaders() })
       ]);
-      if (!usersR.ok || !wfR.ok) {
+      if (!usersR.ok || !wfR.ok || !uwfR.ok) {
         alert('无管理员权限');
         adminData = null;
         return;
       }
       adminData = {
         users: (await usersR.json()).items || [],
-        workflows: (await wfR.json()).items || []
+        workflows: (await wfR.json()).items || [],
+        userWorkflows: (await uwfR.json()).items || []
       };
     } catch(e) {
       alert('加载管理数据失败');
@@ -438,9 +440,8 @@
 
   function renderAdminPanel() {
     if (!adminData) return;
-    const { users, workflows } = adminData;
+    const { users, workflows, userWorkflows } = adminData;
     const zaWorkflows = workflows.filter(w => w.is_za);
-    const userWorkflows = workflows.filter(w => !w.is_za);
 
     const panel = document.createElement('div');
     panel.className = 'mt-admin-panel';
@@ -459,10 +460,10 @@
         <div style="display:flex;gap:4px;padding:10px 20px 0;">
           <button onclick="mtAdminTab('users')" style="padding:7px 16px;border:none;border-radius:8px 8px 0 0;font-size:13px;cursor:pointer;${adminTab==='users' ? 'background:var(--comfy-input-bg,#2a2d35);color:var(--fg-color,#e0e0e0);font-weight:600;' : 'background:none;color:var(--descrip-text,#888);'}">用户管理 (${users.length})</button>
           <button onclick="mtAdminTab('za')" style="padding:7px 16px;border:none;border-radius:8px 8px 0 0;font-size:13px;cursor:pointer;${adminTab==='za' ? 'background:var(--comfy-input-bg,#2a2d35);color:var(--fg-color,#e0e0e0);font-weight:600;' : 'background:none;color:var(--descrip-text,#888);'}">Z&A 共享 (${zaWorkflows.length})</button>
-          <button onclick="mtAdminTab('all')" style="padding:7px 16px;border:none;border-radius:8px 8px 0 0;font-size:13px;cursor:pointer;${adminTab==='all' ? 'background:var(--comfy-input-bg,#2a2d35);color:var(--fg-color,#e0e0e0);font-weight:600;' : 'background:none;color:var(--descrip-text,#888);'}">全部工作流 (${workflows.length})</button>
+          <button onclick="mtAdminTab('all')" style="padding:7px 16px;border:none;border-radius:8px 8px 0 0;font-size:13px;cursor:pointer;${adminTab==='all' ? 'background:var(--comfy-input-bg,#2a2d35);color:var(--fg-color,#e0e0e0);font-weight:600;' : 'background:none;color:var(--descrip-text,#888);'}">个人工作流 (${userWorkflows.length})</button>
         </div>
         <div style="flex:1;overflow:auto;padding:16px 20px 20px;border-top:1px solid var(--border-color,rgba(255,255,255,0.08));">
-          ${adminTab === 'users' ? renderUsersTab(users) : (adminTab === 'za' ? renderZaTab(zaWorkflows) : renderAllTab(workflows))}
+          ${adminTab === 'users' ? renderUsersTab(users) : (adminTab === 'za' ? renderZaTab(zaWorkflows) : renderAllTab(userWorkflows))}
         </div>
       </div>
     `;
@@ -527,26 +528,20 @@
     `;
   }
 
-  function renderAllTab(workflows) {
+  function renderAllTab(userWorkflows) {
     return `
       <table style="width:100%;border-collapse:collapse;font-size:13px;">
         <thead><tr style="color:var(--descrip-text,#888);text-align:left;">
-          <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">名称</th>
-          <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">类型</th>
-          <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">归属</th>
-          <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">更新</th>
-          <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">操作</th>
+          <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">用户</th>
+          <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">工作流</th>
+          <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">路径</th>
         </tr></thead>
         <tbody>
-          ${workflows.length === 0 ? '<tr><td colspan="5" style="padding:20px;text-align:center;color:#888;font-size:13px;">暂无工作流</td></tr>' : workflows.map(w => `
+          ${userWorkflows.length === 0 ? '<tr><td colspan="3" style="padding:20px;text-align:center;color:#888;font-size:13px;">暂无个人工作流</td></tr>' : userWorkflows.map(w => `
             <tr>
-              <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));">${w.display_name || w.name}</td>
-              <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));">${w.is_za ? '<span style="color:#4f6ef7;font-size:11px;padding:1px 6px;border-radius:3px;background:rgba(79,110,247,0.15);">Z&A</span>' : '<span style="color:#9ca3af;font-size:11px;padding:1px 6px;border-radius:3px;background:rgba(156,163,175,0.15);">自定义</span>'}</td>
-              <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));">${w.owner_username || '<span style="color:#4f6ef7;">全员共享</span>'}</td>
-              <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));color:var(--descrip-text,#888);font-size:12px;">${(w.updated_at || w.created_at || '').slice(0,10)}</td>
-              <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));">
-                <button onclick="mtDeleteWf(${w.id})" style="padding:3px 10px;background:none;border:1px solid rgba(255,59,48,0.4);border-radius:4px;color:#ff3b30;font-size:12px;cursor:pointer;">删除</button>
-              </td>
+              <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));">${w.display_name || w.username}</td>
+              <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));">${w.filename}</td>
+              <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));color:var(--descrip-text,#888);font-size:12px;">${w.path}</td>
             </tr>
           `).join('')}
         </tbody>

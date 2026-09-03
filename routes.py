@@ -503,6 +503,62 @@ def setup_api_routes(server):
             ]
         })
 
+    @server.routes.get("/api/mt/admin/user-workflows")
+    async def admin_user_workflows(request):
+        """返回每个用户的个人工作流（文件系统扫描，排除 Z&A 共享）。"""
+        try:
+            await _require_admin(request)
+        except web.HTTPException as e:
+            return e
+
+        try:
+            from .isolation import _all_mt_user_ids, _workflows_dir_for_user, ZA_SUBDIR
+        except Exception:
+            return web.json_response({"items": [], "total": 0})
+
+        all_users = await get_all_users()
+        username_by_id = {u["id"]: u["username"] for u in all_users}
+        display_by_id = {
+            u["id"]: (u["display_name"] or u["username"]) for u in all_users
+        }
+
+        items = []
+        for mt_uid in _all_mt_user_ids():
+            try:
+                user_id = int(mt_uid.split("_")[1])
+            except Exception:
+                continue
+            try:
+                wf_dir = _workflows_dir_for_user(mt_uid)
+            except Exception:
+                continue
+            if not os.path.isdir(wf_dir):
+                continue
+            for root, dirs, files in os.walk(wf_dir):
+                # 跳过 Z&A 共享子目录
+                dirs[:] = [d for d in dirs if d != ZA_SUBDIR]
+                for f in files:
+                    if not f.endswith(".json"):
+                        continue
+                    full = os.path.join(root, f)
+                    rel = os.path.relpath(full, wf_dir)
+                    try:
+                        mtime = os.path.getmtime(full)
+                    except Exception:
+                        mtime = None
+                    items.append({
+                        "user_id": user_id,
+                        "username": username_by_id.get(user_id, str(user_id)),
+                        "display_name": display_by_id.get(
+                            user_id, username_by_id.get(user_id, str(user_id))
+                        ),
+                        "filename": f,
+                        "path": rel,
+                        "mtime": mtime,
+                    })
+
+        return web.json_response({"items": items, "total": len(items)})
+
     # ── Health Check ──
 
     @server.routes.get("/api/mt/health")

@@ -10,7 +10,7 @@
 
   // ── Loaded marker ──
   try {
-    document.title = '[MT-LOADED v64]';
+    document.title = '[MT-LOADED v65]';
   } catch(e) {}
 
   // NOTE: do NOT bootstrap previews from localStorage here. The previous
@@ -829,7 +829,7 @@
       try {
         const existing = document.querySelector('.mt-save-path-modal');
         if (existing) existing.remove();
-        const base = defaultFile.replace(/^workflows\//, '').replace(/\.json$/, '');
+        const base = defaultFile.replace(/^workflows\//, '').split('/').pop().replace(/\.json$/, '');
         const overlay = document.createElement('div');
         overlay.className = 'mt-save-path-modal';
         overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;';
@@ -880,29 +880,40 @@
         const opts = args[1] || {};
         const method = (opts.method || 'GET').toUpperCase();
         if (mtUser && method === 'POST') {
-          // 提取 file 段（/api/userdata/ 或 /userdata/ 之后，到 ?/#/结尾）
           const m = url.match(/\/userdata\/(.+?)([?#].*)?$/);
           if (m) {
             const encodedFile = m[1];
             let file;
             try { file = decodeURIComponent(encodedFile); } catch(e) { file = encodedFile; }
+            // 只处理工作流 .json（workflows/ 下任意层级），排除隐藏文件（.index.json 等）
+            if (!/^workflows\/.+\.json$/.test(file) || file.startsWith('workflows/.')) {
+              return originalFetch.apply(this, args);
+            }
+            // overwrite=true → 覆盖已存在文件（保存 Ctrl+S）；false → 新建/另存为
+            const om = url.match(/[?&]overwrite=(true|false)/);
+            const overwrite = om ? om[1] === 'true' : false;
+            const isAdmin = !!mtUser.is_admin;
             let newFile = null;
-            // 情况 1：保存 Z&A
-            if (file.indexOf('Z&A/') >= 0) {
-              // 管理员：正常保存到 Z&A（覆盖更新公用工作流，方便随时更新）
-              // 非管理员：去 Z&A 段，进「个人」，文件名加时间戳避免覆盖
-              if (!mtUser.is_admin) {
+
+            if (!overwrite) {
+              // 新建 / 另存为 → 弹文件夹选择
+              const choice = await promptSavePath(file, isAdmin);
+              if (choice === null) throw new DOMException('Save cancelled', 'AbortError');
+              newFile = choice;
+            } else if (file.indexOf('Z&A/') >= 0) {
+              // 共享工作流保存（覆盖）：
+              // 管理员 → 直接更新公用工作流（不弹框）
+              // 非管理员 → 重定向到个人（加时间戳）
+              if (!isAdmin) {
                 newFile = addTimestampToFilename(file.replace('Z&A/', '个人/'));
               }
-            }
-            // 情况 2：保存根目录（新建工作流）→ 询问保存路径
-            else if (/^workflows\/[^/]+\.json$/.test(file)) {
-              const choice = await promptSavePath(file, !!mtUser.is_admin);
-              if (choice === null) {
-                throw new DOMException('Save cancelled', 'AbortError');
-              }
+            } else {
+              // 个人 / 根目录保存 → 弹文件夹选择（保存也选）
+              const choice = await promptSavePath(file, isAdmin);
+              if (choice === null) throw new DOMException('Save cancelled', 'AbortError');
               newFile = choice;
             }
+
             if (newFile) {
               const newEncoded = encodeURIComponent(newFile);
               const newUrl = url.replace(encodedFile, newEncoded);

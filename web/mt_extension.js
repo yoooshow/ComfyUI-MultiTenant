@@ -10,7 +10,7 @@
 
   // ── Loaded marker ──
   try {
-    document.title = '[MT-LOADED v63]';
+    document.title = '[MT-LOADED v64]';
   } catch(e) {}
 
   // NOTE: do NOT bootstrap previews from localStorage here. The previous
@@ -823,16 +823,62 @@
     return path + '_' + ts;
   }
 
+  // 询问保存路径（新建工作流保存时）：文件名 + 文件夹（个人 / Z&A[仅管理员]）
+  function promptSavePath(defaultFile, isAdmin) {
+    return new Promise((resolve) => {
+      try {
+        const existing = document.querySelector('.mt-save-path-modal');
+        if (existing) existing.remove();
+        const base = defaultFile.replace(/^workflows\//, '').replace(/\.json$/, '');
+        const overlay = document.createElement('div');
+        overlay.className = 'mt-save-path-modal';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;';
+        const zaOption = isAdmin
+          ? '<label style="display:flex;align-items:center;gap:6px;margin-top:8px;cursor:pointer;"><input type="radio" name="mt-save-folder" value="Z&A"> <span>Z&A（公用，所有用户可见）</span></label>'
+          : '';
+        overlay.innerHTML = `
+          <div style="background:var(--comfy-menu-bg,#1a1a1a);border-radius:10px;max-width:420px;width:90%;box-shadow:0 10px 40px rgba(0,0,0,0.5);padding:16px;">
+            <div style="font-weight:600;font-size:14px;margin-bottom:12px;">保存工作流</div>
+            <div style="margin-bottom:8px;">
+              <label style="font-size:12px;color:var(--descrip-text,#888);display:block;margin-bottom:4px;">文件名</label>
+              <input id="mt-save-filename" value="${base}" style="width:100%;padding:6px 8px;border:1px solid var(--border-color,rgba(255,255,255,0.15));border-radius:6px;background:var(--comfy-input-bg,#222);color:var(--fg-color,#eee);font-size:13px;box-sizing:border-box;">
+            </div>
+            <div style="margin-bottom:14px;">
+              <label style="font-size:12px;color:var(--descrip-text,#888);display:block;margin-bottom:4px;">保存到</label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="radio" name="mt-save-folder" value="个人" checked> <span>个人（仅自己可见）</span></label>
+              ${zaOption}
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:8px;">
+              <button id="mt-save-cancel" style="padding:5px 14px;border:1px solid var(--border-color,rgba(255,255,255,0.15));border-radius:6px;background:none;color:var(--fg-color,#eee);font-size:13px;cursor:pointer;">取消</button>
+              <button id="mt-save-ok" style="padding:5px 14px;border:none;border-radius:6px;background:#4f6ef7;color:#fff;font-size:13px;cursor:pointer;">保存</button>
+            </div>
+          </div>
+        `;
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) { overlay.remove(); resolve(null); } });
+        document.body.appendChild(overlay);
+        const nameInput = overlay.querySelector('#mt-save-filename');
+        nameInput.focus();
+        nameInput.select();
+        overlay.querySelector('#mt-save-cancel').onclick = () => { overlay.remove(); resolve(null); };
+        overlay.querySelector('#mt-save-ok').onclick = () => {
+          const name = nameInput.value.trim();
+          if (!name) { nameInput.focus(); return; }
+          const folder = overlay.querySelector('input[name="mt-save-folder"]:checked').value;
+          const finalName = name.toLowerCase().endsWith('.json') ? name : name + '.json';
+          overlay.remove();
+          resolve('workflows/' + folder + '/' + finalName);
+        };
+      } catch(e) { resolve(null); }
+    });
+  }
+
   function setupZaSaveRedirect() {
     const originalFetch = window.fetch;
-    window.fetch = function(...args) {
+    window.fetch = async function(...args) {
       try {
         let url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
         const opts = args[1] || {};
         const method = (opts.method || 'GET').toUpperCase();
-        // 所有用户（含管理员）+ POST userdata → 保存工作流时进「个人」文件夹。
-        // 管理员也和其他用户一样：保存共享工作流 = 另存为个人副本；修改共享
-        // 工作流走「Z&A 共享」管理面板上传。
         if (mtUser && method === 'POST') {
           // 提取 file 段（/api/userdata/ 或 /userdata/ 之后，到 ?/#/结尾）
           const m = url.match(/\/userdata\/(.+?)([?#].*)?$/);
@@ -849,21 +895,28 @@
                 newFile = addTimestampToFilename(file.replace('Z&A/', '个人/'));
               }
             }
-            // 情况 2：保存根目录的工作流 .json（非 Z&A、非「个人」）→ 放进「个人」文件夹
-            else if (/^workflows\/[^/]+\.json$/.test(file) && file.indexOf('个人/') < 0) {
-              newFile = file.replace('workflows/', 'workflows/个人/');
+            // 情况 2：保存根目录（新建工作流）→ 询问保存路径
+            else if (/^workflows\/[^/]+\.json$/.test(file)) {
+              const choice = await promptSavePath(file, !!mtUser.is_admin);
+              if (choice === null) {
+                throw new DOMException('Save cancelled', 'AbortError');
+              }
+              newFile = choice;
             }
             if (newFile) {
               const newEncoded = encodeURIComponent(newFile);
               const newUrl = url.replace(encodedFile, newEncoded);
-              console.log('[MT] save → personal:', url, '=>', newUrl);
-              showZaToast('已保存到你的个人工作流（' + newFile.split('/').pop() + '）');
+              console.log('[MT] save redirect:', url, '=>', newUrl);
               const newArgs = [newUrl].concat(Array.prototype.slice.call(args, 1));
               return originalFetch.apply(this, newArgs);
             }
           }
         }
-      } catch(e) {}
+      } catch(e) {
+        if (e && e.name === 'AbortError') {
+          throw e;
+        }
+      }
       return originalFetch.apply(this, args);
     };
     console.log('[MT] Z&A save redirect ready');

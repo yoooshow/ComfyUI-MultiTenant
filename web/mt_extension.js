@@ -10,7 +10,7 @@
 
   // ── Loaded marker ──
   try {
-    document.title = '[MT-LOADED v53]';
+    document.title = '[MT-LOADED v54]';
   } catch(e) {}
 
   // NOTE: do NOT bootstrap previews from localStorage here. The previous
@@ -117,6 +117,7 @@
   const HIDDEN_SELECTORS = [
     '[data-testid="model-library-tab-button"]', // 模型库
     '.templates-tab-button',                    // 模板
+    '[data-testid="current-user-button"]',      // 右上角 Comfy 原生用户按钮
     '.comfyui-manager-button',                  // ComfyUI Manager
     '[data-testid="manager-button"]',
     '.manager-button',

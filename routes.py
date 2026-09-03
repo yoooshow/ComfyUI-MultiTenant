@@ -559,6 +559,93 @@ def setup_api_routes(server):
 
         return web.json_response({"items": items, "total": len(items)})
 
+    @server.routes.post("/api/mt/admin/user-workflows/delete")
+    async def admin_delete_user_workflow(request):
+        """删除指定用户的个人工作流文件。"""
+        try:
+            await _require_admin(request)
+        except web.HTTPException as e:
+            return e
+
+        try:
+            data = await request.json()
+        except Exception:
+            return web.json_response({"detail": "Invalid JSON"}, status=400)
+
+        try:
+            user_id = int(data.get("user_id"))
+        except (TypeError, ValueError):
+            return web.json_response({"detail": "用户无效"}, status=400)
+
+        path = (data.get("path") or "").strip()
+        if not path:
+            return web.json_response({"detail": "路径不能为空"}, status=400)
+        # 安全：不能碰 Z&A 共享、不能路径穿越、不能绝对路径
+        if "Z&A" in path or ".." in path or path.startswith("/"):
+            return web.json_response({"detail": "非法路径"}, status=400)
+
+        from .isolation import _workflows_dir_for_user
+        wf_dir = _workflows_dir_for_user(f"mt_{user_id}")
+        full = os.path.abspath(os.path.join(wf_dir, path))
+        if os.path.commonpath((wf_dir, full)) != wf_dir:
+            return web.json_response({"detail": "非法路径"}, status=400)
+
+        if not os.path.isfile(full):
+            return web.json_response({"detail": "文件不存在"}, status=404)
+
+        os.remove(full)
+        return web.json_response({"status": "deleted"})
+
+    @server.routes.get("/api/mt/admin/user-workflows/content")
+    async def admin_user_workflow_content(request):
+        """返回指定用户个人工作流的 JSON 内容 + 节点摘要（用于浏览/下载）。"""
+        try:
+            await _require_admin(request)
+        except web.HTTPException as e:
+            return e
+
+        try:
+            user_id = int(request.query.get("user_id", ""))
+        except (TypeError, ValueError):
+            return web.json_response({"detail": "用户无效"}, status=400)
+
+        path = (request.query.get("path") or "").strip()
+        if not path or "Z&A" in path or ".." in path or path.startswith("/"):
+            return web.json_response({"detail": "非法路径"}, status=400)
+
+        from .isolation import _workflows_dir_for_user
+        wf_dir = _workflows_dir_for_user(f"mt_{user_id}")
+        full = os.path.abspath(os.path.join(wf_dir, path))
+        if os.path.commonpath((wf_dir, full)) != wf_dir:
+            return web.json_response({"detail": "非法路径"}, status=400)
+
+        if not os.path.isfile(full):
+            return web.json_response({"detail": "文件不存在"}, status=404)
+
+        try:
+            with open(full, "r", encoding="utf-8") as f:
+                raw = f.read()
+        except Exception as e:
+            return web.json_response({"detail": f"读取失败: {e}"}, status=500)
+
+        try:
+            wf = json.loads(raw)
+            nodes = wf.get("nodes", [])
+            node_summary = [
+                {"id": n.get("id"), "type": n.get("type"), "title": n.get("title") or n.get("type")}
+                for n in nodes
+            ]
+        except Exception:
+            node_summary = []
+
+        return web.json_response({
+            "path": path,
+            "filename": os.path.basename(path),
+            "raw": raw,
+            "nodes": node_summary,
+            "node_count": len(node_summary),
+        })
+
     # ── Health Check ──
 
     @server.routes.get("/api/mt/health")

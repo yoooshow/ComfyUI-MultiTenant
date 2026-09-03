@@ -10,7 +10,7 @@
 
   // ── Loaded marker ──
   try {
-    document.title = '[MT-LOADED v59]';
+    document.title = '[MT-LOADED v60]';
   } catch(e) {}
 
   // NOTE: do NOT bootstrap previews from localStorage here. The previous
@@ -528,26 +528,114 @@
     `;
   }
 
+  let adminUserWorkflows = [];
+
+  function showWfModal(title, bodyHtml) {
+    const existing = document.querySelector('.mt-wf-modal');
+    if (existing) existing.remove();
+    const overlay = document.createElement('div');
+    overlay.className = 'mt-wf-modal';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;';
+    overlay.innerHTML = `
+      <div style="background:var(--comfy-menu-bg,#1a1a1a);border-radius:10px;max-width:560px;width:90%;max-height:70vh;display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,0.5);">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">
+          <span style="font-weight:600;font-size:14px;">${title}</span>
+          <button onclick="this.closest('.mt-wf-modal').remove()" style="background:none;border:none;color:#888;font-size:18px;cursor:pointer;">✕</button>
+        </div>
+        <div style="padding:12px 16px;overflow:auto;">${bodyHtml}</div>
+      </div>
+    `;
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+  }
+
   function renderAllTab(userWorkflows) {
+    adminUserWorkflows = userWorkflows || [];
+    const groups = {};
+    for (const w of adminUserWorkflows) {
+      const key = w.user_id;
+      if (!groups[key]) groups[key] = { user: w, items: [] };
+      groups[key].items.push(w);
+    }
+    const groupList = Object.values(groups).sort((a, b) => a.user.user_id - b.user.user_id);
+    if (groupList.length === 0) {
+      return '<div style="padding:20px;text-align:center;color:#888;font-size:13px;">暂无个人工作流</div>';
+    }
     return `
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
-        <thead><tr style="color:var(--descrip-text,#888);text-align:left;">
-          <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">用户</th>
-          <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">工作流</th>
-          <th style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));">路径</th>
-        </tr></thead>
-        <tbody>
-          ${userWorkflows.length === 0 ? '<tr><td colspan="3" style="padding:20px;text-align:center;color:#888;font-size:13px;">暂无个人工作流</td></tr>' : userWorkflows.map(w => `
-            <tr>
-              <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));">${w.display_name || w.username}</td>
-              <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));">${w.filename}</td>
-              <td style="padding:8px;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));color:var(--descrip-text,#888);font-size:12px;">${w.path}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
+      <div style="font-size:13px;">
+        ${groupList.map(g => `
+          <div style="margin-bottom:10px;">
+            <div style="padding:6px 10px;background:var(--border-color,rgba(255,255,255,0.06));border-radius:6px;font-weight:600;">
+              👤 ${g.user.display_name || g.user.username} <span style="color:var(--descrip-text,#888);font-weight:400;font-size:12px;">${g.user.username}</span>
+            </div>
+            <div style="padding:4px 0 4px 12px;">
+              ${g.items.map(w => {
+                const idx = adminUserWorkflows.indexOf(w);
+                return `
+                  <div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));">
+                    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${w.path}">📄 ${w.filename}</span>
+                    <button onclick="mtViewUserWf(${idx})" style="padding:2px 10px;border:1px solid var(--border-color,rgba(255,255,255,0.15));border-radius:4px;background:none;color:var(--fg-color,#eee);font-size:12px;cursor:pointer;">浏览</button>
+                    <button onclick="mtDownloadUserWf(${idx})" style="padding:2px 10px;border:1px solid var(--border-color,rgba(255,255,255,0.15));border-radius:4px;background:none;color:var(--fg-color,#eee);font-size:12px;cursor:pointer;">下载</button>
+                    <button onclick="mtDeleteUserWf(${idx})" style="padding:2px 10px;border:1px solid rgba(255,59,48,0.4);border-radius:4px;background:none;color:#ff3b30;font-size:12px;cursor:pointer;">删除</button>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `).join('')}
+      </div>
     `;
   }
+
+  window.mtViewUserWf = async function(idx) {
+    const w = adminUserWorkflows[idx];
+    if (!w) return;
+    try {
+      const r = await fetch(MT_API + '/admin/user-workflows/content?user_id=' + w.user_id + '&path=' + encodeURIComponent(w.path), { headers: getAuthHeaders() });
+      if (!r.ok) { alert('读取失败'); return; }
+      const data = await r.json();
+      let nodeHtml = (data.nodes || []).map(n =>
+        `<div style="padding:4px 0;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.04));font-size:12px;display:flex;gap:8px;align-items:center;"><span style="color:#4f6ef7;font-weight:500;">${n.title}</span><span style="color:var(--descrip-text,#888);">${n.type}</span></div>`
+      ).join('');
+      if (!nodeHtml) nodeHtml = '<div style="color:#888;font-size:12px;">无节点信息</div>';
+      showWfModal('📄 ' + w.filename + ' <span style="color:#888;font-weight:400;font-size:12px;">' + (data.node_count || 0) + ' 个节点</span>', nodeHtml);
+    } catch(e) { alert('浏览失败'); }
+  };
+
+  window.mtDownloadUserWf = async function(idx) {
+    const w = adminUserWorkflows[idx];
+    if (!w) return;
+    try {
+      const r = await fetch(MT_API + '/admin/user-workflows/content?user_id=' + w.user_id + '&path=' + encodeURIComponent(w.path), { headers: getAuthHeaders() });
+      if (!r.ok) { alert('下载失败'); return; }
+      const data = await r.json();
+      const blob = new Blob([data.raw], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = w.filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(a.href);
+    } catch(e) { alert('下载失败'); }
+  };
+
+  window.mtDeleteUserWf = async function(idx) {
+    const w = adminUserWorkflows[idx];
+    if (!w) return;
+    if (!confirm('确认删除 ' + (w.display_name || w.username) + ' 的工作流「' + w.filename + '」？此操作不可恢复。')) return;
+    try {
+      const r = await fetch(MT_API + '/admin/user-workflows/delete', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: w.user_id, path: w.path })
+      });
+      if (!r.ok) { alert('删除失败'); return; }
+      showZaToast('已删除');
+      await loadAdminData();
+      renderAdminPanel();
+    } catch(e) { alert('删除失败'); }
+  };
 
   window.mtAdminTab = function(tab) {
     adminTab = tab;

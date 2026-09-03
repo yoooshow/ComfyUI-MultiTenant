@@ -10,7 +10,7 @@
 
   // ── Loaded marker ──
   try {
-    document.title = '[MT-LOADED v60]';
+    document.title = '[MT-LOADED v61]';
   } catch(e) {}
 
   // NOTE: do NOT bootstrap previews from localStorage here. The previous
@@ -574,7 +574,7 @@
                 return `
                   <div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.05));">
                     <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${w.path}">📄 ${w.filename}</span>
-                    <button onclick="mtViewUserWf(${idx})" style="padding:2px 10px;border:1px solid var(--border-color,rgba(255,255,255,0.15));border-radius:4px;background:none;color:var(--fg-color,#eee);font-size:12px;cursor:pointer;">浏览</button>
+                    <button onclick="mtLoadUserWf(${idx})" style="padding:2px 10px;border:1px solid #4f6ef7;border-radius:4px;background:rgba(79,110,247,0.12);color:#4f6ef7;font-size:12px;cursor:pointer;">载入</button>
                     <button onclick="mtDownloadUserWf(${idx})" style="padding:2px 10px;border:1px solid var(--border-color,rgba(255,255,255,0.15));border-radius:4px;background:none;color:var(--fg-color,#eee);font-size:12px;cursor:pointer;">下载</button>
                     <button onclick="mtDeleteUserWf(${idx})" style="padding:2px 10px;border:1px solid rgba(255,59,48,0.4);border-radius:4px;background:none;color:#ff3b30;font-size:12px;cursor:pointer;">删除</button>
                   </div>
@@ -587,19 +587,26 @@
     `;
   }
 
-  window.mtViewUserWf = async function(idx) {
+  window.mtLoadUserWf = async function(idx) {
     const w = adminUserWorkflows[idx];
     if (!w) return;
     try {
       const r = await fetch(MT_API + '/admin/user-workflows/content?user_id=' + w.user_id + '&path=' + encodeURIComponent(w.path), { headers: getAuthHeaders() });
       if (!r.ok) { alert('读取失败'); return; }
       const data = await r.json();
-      let nodeHtml = (data.nodes || []).map(n =>
-        `<div style="padding:4px 0;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.04));font-size:12px;display:flex;gap:8px;align-items:center;"><span style="color:#4f6ef7;font-weight:500;">${n.title}</span><span style="color:var(--descrip-text,#888);">${n.type}</span></div>`
-      ).join('');
-      if (!nodeHtml) nodeHtml = '<div style="color:#888;font-size:12px;">无节点信息</div>';
-      showWfModal('📄 ' + w.filename + ' <span style="color:#888;font-weight:400;font-size:12px;">' + (data.node_count || 0) + ' 个节点</span>', nodeHtml);
-    } catch(e) { alert('浏览失败'); }
+      const app = (window.comfyAPI && window.comfyAPI.app && window.comfyAPI.app.app) || window.app;
+      if (!app || typeof app.loadGraphData !== 'function') {
+        alert('画布未就绪，无法载入');
+        return;
+      }
+      const wf = JSON.parse(data.raw);
+      await app.loadGraphData(wf, true, false);
+      // 关闭管理面板，回到画布
+      document.querySelector('.mt-admin-panel')?.remove();
+      showZaToast('已载入「' + w.filename + '」');
+    } catch(e) {
+      alert('载入失败：' + (e && e.message ? e.message : e));
+    }
   };
 
   window.mtDownloadUserWf = async function(idx) {

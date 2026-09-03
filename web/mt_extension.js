@@ -10,7 +10,7 @@
 
   // ── Loaded marker ──
   try {
-    document.title = '[MT-LOADED v49]';
+    document.title = '[MT-LOADED v50]';
   } catch(e) {}
 
   // NOTE: do NOT bootstrap previews from localStorage here. The previous
@@ -645,13 +645,13 @@
             let file;
             try { file = decodeURIComponent(encodedFile); } catch(e) { file = encodedFile; }
             if (file.indexOf('Z&A/') >= 0) {
-              // 去 Z&A 段 → 私有目录，文件名加时间戳避免覆盖
-              let newFile = file.replace('Z&A/', '');
+              // 去 Z&A 段 → 放进「个人」文件夹，文件名加时间戳避免覆盖
+              let newFile = file.replace('Z&A/', '个人/');
               newFile = addTimestampToFilename(newFile);
               const newEncoded = encodeURIComponent(newFile);
               const newUrl = url.replace(encodedFile, newEncoded);
               console.log('[MT] Z&A save → private copy:', url, '=>', newUrl);
-              showZaToast('🔒 公用工作流为只读，已另存为私有副本（' + newFile.split('/').pop() + '）');
+              showZaToast('🔒 公用工作流已另存到你的个人工作流（' + newFile.split('/').pop() + '）');
               const newArgs = [newUrl].concat(Array.prototype.slice.call(args, 1));
               return originalFetch.apply(this, newArgs);
             }

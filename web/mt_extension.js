@@ -10,7 +10,7 @@
 
   // ── Loaded marker ──
   try {
-    document.title = '[MT-LOADED v47]';
+    document.title = '[MT-LOADED v48]';
   } catch(e) {}
 
   // NOTE: do NOT bootstrap previews from localStorage here. The previous
@@ -591,6 +591,66 @@
     console.log('[MT] Preview persistence ready');
   }
 
+  // ── Z&A 公用工作流：保存重定向 + toast 提示 ──
+  // 非管理员在原生界面里加载 Z&A 工作流、改动后保存时，ComfyUI 会走
+  // POST /api/userdata/workflows/Z&A/xxx.json（覆盖自己目录的只读镜像）。
+  // 后端已 403 拦截，但那样用户会看到保存失败。这里在前端把保存目标
+  // 重写为私有目录（去掉 Z&A/ 段），让"保存"自然变成"另存为私有副本"。
+  let zaToast = null;
+  function showZaToast(text) {
+    try {
+      if (zaToast) { zaToast.remove(); zaToast = null; }
+      zaToast = document.createElement('div');
+      zaToast.style.cssText =
+        'position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:100000;' +
+        'background:rgba(28,30,36,0.96);color:#e0e0e0;font-size:13px;padding:10px 18px;' +
+        'border-radius:8px;border:1px solid rgba(255,255,255,0.14);box-shadow:0 8px 24px rgba(0,0,0,0.45);' +
+        'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans SC",sans-serif;' +
+        'pointer-events:none;transition:opacity .3s;max-width:80vw;';
+      zaToast.textContent = text;
+      document.body.appendChild(zaToast);
+      setTimeout(() => {
+        if (zaToast) {
+          zaToast.style.opacity = '0';
+          setTimeout(() => { if (zaToast) { zaToast.remove(); zaToast = null; } }, 300);
+        }
+      }, 3200);
+    } catch(e) {}
+  }
+
+  // 各种 URL 编码形式下的 workflows/Z&A/ 段 → 重写为 workflows/
+  const ZA_PATH_PATTERNS = [
+    'workflows/Z&A/',
+    'workflows%2FZ%26A%2F',
+    'workflows%2FZ&A%2F',
+    'workflows/Z%26A/'
+  ];
+
+  function setupZaSaveRedirect() {
+    const originalFetch = window.fetch;
+    window.fetch = function(...args) {
+      try {
+        let url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
+        const opts = args[1] || {};
+        const method = (opts.method || 'GET').toUpperCase();
+        // 非管理员 + POST userdata + 目标含 Z&A → 重写为私有目录
+        if (mtUser && !mtUser.is_admin && method === 'POST' && url.includes('/userdata/')) {
+          for (const p of ZA_PATH_PATTERNS) {
+            if (url.includes(p)) {
+              const newUrl = url.replace(p, 'workflows/');
+              console.log('[MT] Z&A save → private copy:', url, '=>', newUrl);
+              showZaToast('🔒 公用工作流为只读，已另存为你的私有副本');
+              const newArgs = [newUrl].concat(Array.prototype.slice.call(args, 1));
+              return originalFetch.apply(this, newArgs);
+            }
+          }
+        }
+      } catch(e) {}
+      return originalFetch.apply(this, args);
+    };
+    console.log('[MT] Z&A save redirect ready');
+  }
+
   // ── Preview Image Restore (refresh survival) ──
   // Restore persisted previews into nodeOutputs so the native image URL
   // builder (/view?type=output) can serve them after refresh/restart.
@@ -745,6 +805,7 @@
     try { ensureUserMenuPresent(); } catch(e) {}
     try { setupWorkflowBadges(); } catch(e) {}
     try { setupPreviewPersistence(); } catch(e) {}
+    try { setupZaSaveRedirect(); } catch(e) {}
 
     // Re-restore previews whenever a workflow is loaded/switched.
     // ComfyUI's loadGraphData lives on window.comfyAPI.app.app (the real

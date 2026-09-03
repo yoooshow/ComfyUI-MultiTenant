@@ -10,7 +10,7 @@
 
   // ── Loaded marker ──
   try {
-    document.title = '[MT-LOADED v58]';
+    document.title = '[MT-LOADED v59]';
   } catch(e) {}
 
   // NOTE: do NOT bootstrap previews from localStorage here. The previous
@@ -710,7 +710,7 @@
         let url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
         const opts = args[1] || {};
         const method = (opts.method || 'GET').toUpperCase();
-        // 所有用户（含管理员）+ POST userdata → 保存 Z&A 目录时重定向到「个人」。
+        // 所有用户（含管理员）+ POST userdata → 保存工作流时进「个人」文件夹。
         // 管理员也和其他用户一样：保存共享工作流 = 另存为个人副本；修改共享
         // 工作流走「Z&A 共享」管理面板上传。
         if (mtUser && method === 'POST') {
@@ -720,14 +720,20 @@
             const encodedFile = m[1];
             let file;
             try { file = decodeURIComponent(encodedFile); } catch(e) { file = encodedFile; }
+            let newFile = null;
+            // 情况 1：保存 Z&A → 去 Z&A 段，进「个人」，文件名加时间戳避免覆盖
             if (file.indexOf('Z&A/') >= 0) {
-              // 去 Z&A 段 → 放进「个人」文件夹，文件名加时间戳避免覆盖
-              let newFile = file.replace('Z&A/', '个人/');
-              newFile = addTimestampToFilename(newFile);
+              newFile = addTimestampToFilename(file.replace('Z&A/', '个人/'));
+            }
+            // 情况 2：保存根目录的工作流 .json（非 Z&A、非「个人」）→ 放进「个人」文件夹
+            else if (/^workflows\/[^/]+\.json$/.test(file) && file.indexOf('个人/') < 0) {
+              newFile = file.replace('workflows/', 'workflows/个人/');
+            }
+            if (newFile) {
               const newEncoded = encodeURIComponent(newFile);
               const newUrl = url.replace(encodedFile, newEncoded);
-              console.log('[MT] Z&A save → private copy:', url, '=>', newUrl);
-              showZaToast('🔒 公用工作流已另存到你的个人工作流（' + newFile.split('/').pop() + '）');
+              console.log('[MT] save → personal:', url, '=>', newUrl);
+              showZaToast('已保存到你的个人工作流（' + newFile.split('/').pop() + '）');
               const newArgs = [newUrl].concat(Array.prototype.slice.call(args, 1));
               return originalFetch.apply(this, newArgs);
             }

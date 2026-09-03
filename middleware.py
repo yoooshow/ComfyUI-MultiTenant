@@ -102,6 +102,19 @@ def _is_restricted_for_user(path: str) -> bool:
     return False
 
 
+def _is_za_shared_write(path: str, method: str) -> bool:
+    """True for a non-admin write to a Z&A shared workflow file.
+
+    Z&A workflows are admin-managed and synced into each user's
+    ``workflows/Z&A/`` dir as read-only mirrors. A user must not overwrite,
+    delete, or move them — they can only "save as" their own private copy.
+    Covers both decoded path (``/Z&A/``) and raw-encoded (``/Z%26A/``).
+    """
+    if method not in ("POST", "DELETE"):
+        return False
+    return "/Z&A/" in path or "/Z%26A/" in path
+
+
 def setup_middleware(server):
     """Register auth middleware on the ComfyUI aiohttp app."""
 
@@ -125,6 +138,15 @@ def setup_middleware(server):
                     pass
                 else:
                     return web.json_response({"detail": "需要管理员权限"}, status=403)
+
+        # Block non-admin writes to Z&A shared workflows. These are admin-managed
+        # mirrors synced into every user's workflows/Z&A/ dir; a user must never
+        # overwrite/delete/move them (only "save as" a private copy). Checked
+        # BEFORE public pass-through because /api/userdata is in _PUBLIC_PREFIXES.
+        if user is not None and not user.get("is_admin", False):
+            if _is_za_shared_write(path, request.method):
+                return web.json_response(
+                    {"detail": "公用工作流为只读，请另存为你的私有工作流"}, status=403)
 
         # Public paths pass through (no auth needed)
         if _is_public_path(path) and not _requires_auth(path):

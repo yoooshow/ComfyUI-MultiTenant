@@ -10,7 +10,7 @@
 
   // ── Loaded marker ──
   try {
-    document.title = '[MT-LOADED v50]';
+    document.title = '[MT-LOADED v51]';
   } catch(e) {}
 
   // NOTE: do NOT bootstrap previews from localStorage here. The previous
@@ -103,27 +103,40 @@
 
   // ── UI Overrides ──
   // Non-admin users see a restricted sidebar. Admin sees everything.
+
+  // 通过 icon class 定位，隐藏整个侧边栏按钮（Button 含 icon + label）。
+  // 🔴 只隐藏 <i> icon 不够——按钮外框和 label 文字还在，看起来"没隐藏"。
+  const HIDDEN_ICON_PATTERNS = [
+    'ph--terminal-bold',   // 控制台（console）
+    'lucide--keyboard',    // 快捷键
+    'lucide--settings',    // 设置
+    'pi-sign-out',         // Comfy 原生账户/登出（SidebarLogoutIcon）
+  ];
+
+  // 其他需要隐藏的元素（按 class/testid 直接定位）
   const HIDDEN_SELECTORS = [
     '[data-testid="model-library-tab-button"]', // 模型库
     '.templates-tab-button',                    // 模板
-    '.side-bar-button-icon[class*="ph--terminal-bold"]', // 控制台
-    '.side-bar-button-icon[class*="lucide--keyboard"]',  // 快捷键
     '.comfyui-manager-button',                  // ComfyUI Manager
     '[data-testid="manager-button"]',
     '.manager-button',
     '#comfyui-manager-button',
-    '[class*="manager"][class*="button"]',
   ];
 
   function applyHidden() {
+    // 1. 隐藏整个侧边栏按钮：icon class 定位到 <i>，再向上找 .side-bar-button
+    HIDDEN_ICON_PATTERNS.forEach(pat => {
+      try {
+        document.querySelectorAll('.side-bar-button-icon[class*="' + pat + '"]').forEach(icon => {
+          const btn = icon.closest('.side-bar-button') || icon;
+          btn.style.display = 'none';
+        });
+      } catch(e) {}
+    });
+    // 2. 隐藏其他元素
     HIDDEN_SELECTORS.forEach(sel => {
       try {
-        document.querySelectorAll(sel).forEach(el => {
-          if (!el.classList.contains('mt-hidden')) {
-            el.style.display = 'none';
-            el.classList.add('mt-hidden');
-          }
-        });
+        document.querySelectorAll(sel).forEach(el => { el.style.display = 'none'; });
       } catch(e) {}
     });
   }

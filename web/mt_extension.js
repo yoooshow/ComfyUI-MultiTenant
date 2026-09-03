@@ -10,7 +10,7 @@
 
   // ── Loaded marker ──
   try {
-    document.title = '[MT-LOADED v61]';
+    document.title = '[MT-LOADED v62]';
   } catch(e) {}
 
   // NOTE: do NOT bootstrap previews from localStorage here. The previous
@@ -145,6 +145,29 @@
     } catch(e) {}
   }
 
+  // 左上角 Comfy Logo 菜单（TieredMenu popup .comfy-command-menu）里的敏感项。
+  // 菜单是点击 Logo 后动态渲染的，靠 MutationObserver 触发的 applyHidden 隐藏。
+  const COMMAND_MENU_HIDDEN_ICONS = [
+    'icon-[lucide--settings]',         // 设置
+    'icon-[comfy--extensions-blocks]', // 管理扩展（Manager）
+    'icon-[comfy--template]',          // 浏览模板
+    'mdi mdi-help-circle-outline',     // 帮助
+  ];
+
+  function hideCommandMenuItems() {
+    try {
+      document.querySelectorAll('.comfy-command-menu .p-menubar-item-link').forEach(a => {
+        const icon = a.querySelector('.p-menubar-item-icon');
+        if (!icon) return;
+        const cls = icon.className || '';
+        if (COMMAND_MENU_HIDDEN_ICONS.some(ic => cls.indexOf(ic) >= 0)) {
+          const li = a.closest('li') || a;
+          li.style.display = 'none';
+        }
+      });
+    } catch(e) {}
+  }
+
   function applyHidden() {
     // 1. 隐藏整个侧边栏按钮：icon class 定位到 <i>，再向上找 .side-bar-button
     HIDDEN_ICON_PATTERNS.forEach(pat => {
@@ -163,6 +186,8 @@
     });
     // 3. 隐藏 ComfyUI Manager 按钮组（右上角 action bar）
     hideManagerButtons();
+    // 4. 隐藏左上角 Comfy Logo 菜单里的敏感项（设置/管理扩展/浏览模板/帮助）
+    hideCommandMenuItems();
   }
 
   function hideFeaturesForUser() {
